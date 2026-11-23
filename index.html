@@ -36,6 +36,7 @@
     <span class="chip" id="chipMode">🏠 Εξερεύνηση</span>
     <span class="chip act" id="chipAct" hidden></span>
     <span class="chip" id="chipTorch" hidden></span>
+    <button class="chip cloud" id="chipCloud" data-on="0" aria-label="Ρύθμιση κλειδιού cloud μοντέλου (Gemini)">☁️</button>
     <span class="chip" id="chipCompass">🧭 —</span>
     <span class="chip dim" id="fps">-- fps</span>
     <button id="btnSettings" class="icon" aria-label="Ρυθμίσεις και μνήμη">⚙️</button>
@@ -79,6 +80,18 @@
 <dialog id="panel" class="panel" aria-label="Ρυθμίσεις">
   <header><h2>Ρυθμίσεις & μνήμη</h2><button id="btnClosePanel" class="icon" aria-label="Κλείσιμο">✕</button></header>
 
+  <section id="secCloud">
+    <h3>☁️ Έξυπνη όραση με Gemini (κλειδί API)</h3>
+    <p class="muted">Βάλτε εδώ το κλειδί σας από το Google AI Studio. Μετά, οι εντολές «τι βλέπεις», «διάβασε» και «τι είναι αυτό» θα χρησιμοποιούν το Gemini όταν υπάρχει internet.</p>
+    <label class="row"><input id="setWeb" type="checkbox"> Αναζήτηση στη Wikipedia (στέλνει μόνο λέξεις, ποτέ εικόνα)</label>
+    <label>Κλειδί Google Gemini (προαιρετικό) <input id="setGemini" type="password" autocomplete="off" placeholder="AIza…"></label>
+    <label>Μοντέλο Gemini <input id="setGeminiModel" type="text" list="geminiModels" placeholder="κενό = αυτόματη επιλογή του καλύτερου διαθέσιμου"></label>
+    <datalist id="geminiModels"></datalist>
+    <button id="btnGeminiTest">🔑 Έλεγχος κλειδιού / λίστα μοντέλων</button> <span id="geminiOut" class="muted"></span>
+    <label>Εναλλακτικά: κλειδί Claude API <input id="setKey" type="password" autocomplete="off" placeholder="sk-ant-…"></label>
+    <p class="muted"><b>Προσοχή ιδιωτικότητας:</b> με κλειδί, η φωτογραφία στέλνεται στον πάροχο μόνο όταν ζητήσετε «τι είναι αυτό» ή «περίγραψε αναλυτικά». Στο δωρεάν επίπεδο του Gemini, η Google μπορεί να χρησιμοποιεί τα δεδομένα για βελτίωση των προϊόντων της — μην τη χρησιμοποιείτε για προσωπικά έγγραφα ή πρόσωπα. Τα κλειδιά μένουν μόνο σε αυτή τη συσκευή.</p>
+  </section>
+
   <section>
     <h3>Φωνή</h3>
     <label>Ένταση <output id="volOut"></output><input id="setVolume" type="range" min="1" max="10" step="1"></label>
@@ -111,17 +124,6 @@
     <label>Συγκεκριμένη κάμερα <select id="setCamera"></select></label>
     <label>Γωνία όρασης κάμερας (FOV) <output id="fovOut"></output><input id="setFov" type="range" min="45" max="100" step="1"></label>
     <p class="muted">Η γωνία όρασης επηρεάζει την ακρίβεια κατεύθυνσης και απόστασης. Οι περισσότερες κάμερες κινητών είναι 60–75°.</p>
-  </section>
-
-  <section>
-    <h3>«Τι είναι αυτό;» — αναζήτηση στο διαδίκτυο</h3>
-    <label class="row"><input id="setWeb" type="checkbox"> Αναζήτηση στη Wikipedia (στέλνει μόνο λέξεις, ποτέ εικόνα)</label>
-    <label>Κλειδί Google Gemini (προαιρετικό) <input id="setGemini" type="password" autocomplete="off" placeholder="AIza…"></label>
-    <label>Μοντέλο Gemini <input id="setGeminiModel" type="text" list="geminiModels" placeholder="κενό = αυτόματη επιλογή του καλύτερου διαθέσιμου"></label>
-    <datalist id="geminiModels"></datalist>
-    <button id="btnGeminiTest">🔑 Έλεγχος κλειδιού / λίστα μοντέλων</button> <span id="geminiOut" class="muted"></span>
-    <label>Εναλλακτικά: κλειδί Claude API <input id="setKey" type="password" autocomplete="off" placeholder="sk-ant-…"></label>
-    <p class="muted"><b>Προσοχή ιδιωτικότητας:</b> με κλειδί, η φωτογραφία στέλνεται στον πάροχο μόνο όταν ζητήσετε «τι είναι αυτό» ή «περίγραψε αναλυτικά». Στο δωρεάν επίπεδο του Gemini, η Google μπορεί να χρησιμοποιεί τα δεδομένα για βελτίωση των προϊόντων της — μην τη χρησιμοποιείτε για προσωπικά έγγραφα ή πρόσωπα. Τα κλειδιά μένουν μόνο σε αυτή τη συσκευή.</p>
   </section>
 
   <section>

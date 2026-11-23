@@ -66,6 +66,7 @@ function updateChips() {
   $('chipMode').textContent = { walk: '🚶 Περπάτημα', car: '🚗 Σε όχημα' }[settings.mode] || '🏠 Εξερεύνηση';
   const act = search.active ? `🔎 ${search.target.label}` : scan.active ? '🔄 Σάρωση 360°' : nav.active ? `🧭 ${nav.place.name}` : st.paused ? '⏸ Παύση' : '';
   $('chipAct').textContent = act; $('chipAct').hidden = !act;
+  const cc = $('chipCloud'); cc.textContent = hasCloud() ? (settings.geminiKey ? '☁️ Gemini' : '☁️ Claude') : '☁️ Βάλτε κλειδί'; cc.dataset.on = hasCloud() ? '1' : '0';
   $('chipTorch').textContent = cam.torchOn ? '🔦 Φακός' : ''; $('chipTorch').hidden = !cam.torchOn;
 }
 
@@ -646,14 +647,32 @@ async function doRead() {
   stopActivities(true);
   st.busy = true;
   try {
-    say('Κρατήστε σταθερά το κείμενο μπροστά στην κάμερα. Διαβάζω.', { priority: 2 });
+    const cloud = hasCloud() && navigator.onLine;
+    say(cloud ? 'Κρατήστε σταθερά το κείμενο. Βγάζω φωτογραφία.' : 'Κρατήστε σταθερά το κείμενο μπροστά στην κάμερα. Διαβάζω.', { priority: 2 });
     if (st.luma < 0.2 && cam.torchSupported && !cam.torchOn) await cam.setTorch(true);
-    await sleep(900);
-    const { text } = await readText(video);
-    if (!text || text.length < 3) { chime.error(); return say('Δεν βρήκα κείμενο. Πλησιάστε, κρατήστε σταθερά και βεβαιωθείτε ότι υπάρχει φως.', { priority: 2 }); }
+    await waitSilence(); await sleep(700);
+    // Φωτογραφία υψηλής ανάλυσης του τρέχοντος καρέ
+    const { canvas, base64 } = cropFrame(video, null, 0, 1600);
+    beep({ freq: 1500, dur: 0.05 }); beep({ freq: 900, dur: 0.06, when: 0.06 }); // «κλικ» φωτογραφίας
+    let text = '', via = 'local';
+    if (cloud) {
+      try {
+        say('Διαβάζω.', { priority: 2 });
+        text = (await cloudAnalyze(settings, base64, 'read')).description;
+        via = 'cloud';
+      } catch (e) {
+        console.warn('cloud read', e);
+        if (e.status === 429) say('Το όριο χρήσης του cloud μοντέλου εξαντλήθηκε. Δοκιμάζω την τοπική ανάγνωση.', { priority: 2 });
+      }
+    }
+    if (!text) { try { text = (await readText(canvas)).text; via = 'local'; } catch (e) { console.warn('ocr', e); } }
+    if (!text || text.length < 3 || /^Δεν βλέπω κείμενο/.test(text)) {
+      chime.error();
+      return say('Δεν βρήκα κείμενο. Πλησιάστε, κρατήστε σταθερά και βεβαιωθείτε ότι υπάρχει φως.' + (hasCloud() ? '' : ' Για πολύ πιο ακριβή ανάγνωση βάλτε κλειδί Gemini στις ρυθμίσεις.'), { priority: 2 });
+    }
     chime.done();
-    $('said').textContent = text; addLog('📖', text);
-    for (const chunk of text.match(/[^.]{1,180}(\.|$)/g) || [text]) voice.speak(chunk.trim(), { priority: 2, key: null });
+    $('said').textContent = text; addLog(via === 'cloud' ? '🧠' : '📖', text);
+    for (const chunk of text.replace(/\n+/g, '. ').match(/[^.!?;]{1,200}([.!?;]|$)/g) || [text]) voice.speak(chunk.trim(), { priority: 2, key: null });
   } catch (e) {
     console.error(e); say('Δεν μπόρεσα να διαβάσω το κείμενο.', { priority: 2 });
   } finally { st.busy = false; }
@@ -783,7 +802,8 @@ async function execute(cmd) {
     case 'STOP': { const was = stopActivities(); voice.stop(); chime.done(); return was ? say('Εντάξει, σταμάτησα.', { priority: 2 }) : undefined; }
     case 'PAUSE': st.paused = true; stopActivities(true); updateChips(); return say(S.paused, { priority: 2 });
     case 'RESUME': st.paused = false; updateChips(); return say(S.resumed, { priority: 2 });
-    case 'DESCRIBE': return describeScene();
+    case 'DESCRIBE': return hasCloud() && navigator.onLine ? describeDeep() : describeScene(); // με κλειδί, το «τι βλέπεις» χρησιμοποιεί το cloud μοντέλο
+    case 'DESCRIBE_LOCAL': return describeScene();
     case 'DESCRIBE_DEEP': return describeDeep();
     case 'SCAN': return startScan();
     case 'READ_TEXT': return doRead();
@@ -995,6 +1015,7 @@ function bindUI() {
   $('qIdentify').onclick = () => execute({ intent: 'IDENTIFY', target: null });
   $('qHelp').onclick = () => execute({ intent: 'HELP' });
   $('btnSettings').onclick = () => { renderMemory(); $('panel').showModal(); };
+  $('chipCloud').onclick = () => { renderMemory(); $('panel').showModal(); $('secCloud').scrollIntoView(); $('setGemini').focus(); };
   $('btnClosePanel').onclick = () => $('panel').close();
   $('btnTypeFind').onclick = () => {
     const q = $('typeFind').value.trim(); if (!q) return;

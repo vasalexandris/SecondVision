@@ -55,7 +55,7 @@ await page.route('https://generativelanguage.googleapis.com/**', route => {
   if (u.includes('gemini-3.8-flash')) return route.fulfill({ status: 404, headers: h, body: '{}' });
   const body = JSON.parse(route.request().postData());
   const prompt = body.contents[0].parts.find(p => p.text).text; const hasImg = body.contents[0].parts.some(p => p.inline_data?.data?.length > 1000);
-  const text = !hasImg ? 'ΧΩΡΙΣ ΕΙΚΟΝΑ' : /JSON/.test(prompt) ? JSON.stringify({ name: 'κλειδί', description: 'Μεταλλικό κλειδί κλειδαριάς. Φαίνεται παλιό.' }) : 'Μπροστά σας υπάρχει ένα κομοδίνο με φωτιστικό. Δεξιά είναι ένα κρεβάτι.';
+  const text = !hasImg ? 'ΧΩΡΙΣ ΕΙΚΟΝΑ' : /JSON/.test(prompt) ? JSON.stringify({ name: 'κλειδί', description: 'Μεταλλικό κλειδί κλειδαριάς. Φαίνεται παλιό.' }) : /Διάβασε ολόκληρο/.test(prompt) ? 'ΓΑΛΑ ΔΕΛΤΑ. Πλήρες. Ένα λίτρο.' : 'Μπροστά σας υπάρχει ένα κομοδίνο με φωτιστικό. Δεξιά είναι ένα κρεβάτι.';
   route.fulfill({ status: 200, headers: h, contentType: 'application/json', body: JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] }) });
 });
 await page.goto(BASE);
@@ -80,11 +80,19 @@ await page.evaluate(() => window.__sv.identify(null));
 ok('Μάθηση: με «όχι» δεν διπλοαποθηκεύει', await page.evaluate(() => window.__sv.memory.items.length) === 1);
 
 // Αναλυτική περιγραφή
-await page.evaluate(() => { window.__said.length = 0; return window.__sv.handleUtterance(['περιέγραψε αναλυτικά']); });
+await page.evaluate(() => { window.__said.length = 0; return window.__sv.handleUtterance(['τι βλέπεις']); });
 await page.waitForFunction(() => window.__said.some(x => /κομοδίνο/.test(x)), null, { timeout: 30000 }).catch(() => {});
 s = await said();
-ok('Αναλυτική περιγραφή από Gemini', s.some(x => /κομοδίνο/.test(x)), s.join(' | '));
+ok('«τι βλέπεις» με κλειδί χρησιμοποιεί Gemini', s.some(x => /κομοδίνο/.test(x)), s.join(' | '));
 
+// Διάβασε μέσω Gemini
+await page.evaluate(() => { window.__said.length = 0; return window.__sv.handleUtterance(['διάβασε']); });
+await page.waitForFunction(() => window.__said.some(x => /ΓΑΛΑ ΔΕΛΤΑ/.test(x)), null, { timeout: 30000 }).catch(() => {});
+s = await said();
+ok('«διάβασε» φωτογραφίζει και διαβάζει με Gemini', s.some(x => /ΓΑΛΑ ΔΕΛΤΑ/.test(x)) && s.some(x => /Ένα λίτρο/.test(x)), s.join(' | '));
+ok('chip ☁️ δείχνει Gemini', (await page.textContent('#chipCloud')).includes('Gemini'), await page.textContent('#chipCloud'));
+await page.click('#btnSettings');
+ok('πεδίο κλειδιού Gemini ορατό στις ρυθμίσεις', await page.isVisible('#setGemini'));
 // Χωρίς κλειδί → τοπική περιγραφή
 await page.evaluate(() => { const st = JSON.parse(localStorage.getItem('secondvision.settings.v1')); });
 await browser.close();

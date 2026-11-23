@@ -41,8 +41,12 @@ function prepare(video) {
 export async function readText(video) {
   const worker = await getWorker();
   const { data } = await worker.recognize(prepare(video));
-  // Τα v6+ επιστρέφουν απλό κείμενο· κρατάμε γραμμές με αρκετά γράμματα
-  const lines = String(data.text || '').split('\n').map(l => l.trim()).filter(l => /[\p{L}\p{N}]{2,}/u.test(l));
-  const text = lines.join('. ').replace(/\s+/g, ' ').trim();
+  // Κρατάμε μόνο γραμμές που μοιάζουν με πραγματικό κείμενο (αρκετά γράμματα, λέξεις ≥2 χαρακτήρων) — αποφεύγει «γράμμα γράμμα» θόρυβο
+  const lines = String(data.text || '').split('\n').map(l => l.trim()).filter(l => {
+    const letters = (l.match(/[\p{L}\p{N}]/gu) || []).length;
+    const words = l.split(/\s+/).filter(w => (w.match(/[\p{L}\p{N}]/gu) || []).length >= 2);
+    return letters >= 3 && letters / l.replace(/\s/g, '').length >= 0.6 && words.length >= 1 && words.length >= l.split(/\s+/).length / 2;
+  });
+  const text = (data.confidence < 55 ? '' : lines.join('. ')).replace(/\s+/g, ' ').trim();
   return { text, confidence: data.confidence };
 }

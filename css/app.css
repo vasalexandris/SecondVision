@@ -29,6 +29,9 @@ h1 { font-size: clamp(2rem, 8vw, 2.8rem); letter-spacing: -.5px; background: lin
 .topbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .chip { background: var(--card2); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font-size: .8rem; white-space: nowrap; }
 .chip.act { background: #3a2c00; border-color: var(--warn); color: #ffe08a; }
+.chip.cloud { cursor: pointer; color: var(--fg); }
+.chip.cloud[data-on="0"] { background: #3a2c00; border-color: var(--warn); color: #ffe08a; }
+.chip.cloud[data-on="1"] { border-color: var(--accent); color: var(--accent); }
 .chip.dim { color: var(--dim); margin-left: auto; }
 .icon { background: var(--card2); border: 1px solid var(--line); border-radius: 12px; width: 44px; height: 44px; font-size: 1.2rem; }
 

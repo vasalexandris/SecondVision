@@ -1,7 +1,7 @@
 // Service worker: λειτουργία χωρίς internet.
 // - Κέλυφος εφαρμογής (html/css/js): network-first με πτώση στην cache (έτσι ενημερώνεται εύκολα).
 // - vendor/ (μοντέλα, wasm, βιβλιοθήκες): cache-first (αμετάβλητα, μεγάλα).
-const VERSION = 'v1';
+const VERSION = 'v2';
 const SHELL = `secondvision-shell-${VERSION}`;
 const VENDOR = `secondvision-vendor-${VERSION}`;
 

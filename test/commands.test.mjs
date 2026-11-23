@@ -66,3 +66,4 @@ test('αναλυτική περιγραφή (cloud)', () => {
   assert.equal(P('αναλυτική περιγραφή').intent, 'DESCRIBE_DEEP');
   assert.equal(P('τι βλέπεις').intent, 'DESCRIBE');
 });
+test('τοπική περιγραφή', () => assert.equal(P('τι αναγνωρίζεις').intent, 'DESCRIBE_LOCAL'));
