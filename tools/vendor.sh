@@ -22,8 +22,8 @@ done
 
 pack tesseract.js@7.0.0 tesseract.js
 cp $TMP/x_tesseract.js/dist/tesseract.min.js $TMP/x_tesseract.js/dist/worker.min.js $V/tesseract/
-pack tesseract.js-core@6.1.2 tesseract.js-core
-cp $TMP/x_tesseract.js-core/tesseract-core-simd-lstm.wasm.js $TMP/x_tesseract.js-core/tesseract-core-lstm.wasm.js $V/tesseract/
+pack tesseract.js-core@7.0.0 tesseract.js-core
+cp $TMP/x_tesseract.js-core/tesseract-core-relaxedsimd-lstm.wasm.js $TMP/x_tesseract.js-core/tesseract-core-simd-lstm.wasm.js $TMP/x_tesseract.js-core/tesseract-core-lstm.wasm.js $V/tesseract/
 pack @tesseract.js-data/ell@1.0.0 data-ell
 cp $TMP/x_data-ell/4.0.0_best_int/ell.traineddata.gz $V/tesseract/
 pack @tesseract.js-data/eng@1.0.0 data-eng

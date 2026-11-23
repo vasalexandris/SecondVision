@@ -112,7 +112,7 @@ function loop(now) {
   requestAnimationFrame(loop);
   if (!st.running || st.paused) return;
   if (now - lastFrameT < MIN_FRAME_MS) return;
-  if (video.readyState < 2 || video.currentTime === st.lastVideoTime) return;
+  if (st.learningFaces || video.readyState < 2 || video.currentTime === st.lastVideoTime) return;
   st.lastVideoTime = video.currentTime;
   lastFrameT = now;
   try { processFrame(now); } catch (e) { console.error('frame', e); }
@@ -296,7 +296,7 @@ function nearestPlace(pos, maxM = 60) {
 function recordSightings(tracks, heading) {
   const now = Date.now();
   for (const tr of tracks) {
-    if (tr.hits < 4 || (tr.flags.rec && now - tr.flags.rec < 4000)) continue;
+    if (tr.hits < (tr.cls.startsWith('custom:') ? 2 : 4) || (tr.flags.rec && now - tr.flags.rec < 4000)) continue;
     if (tr.cls === 'person' && !tr.name) continue; // ανώνυμους ανθρώπους δεν τους αποθηκεύουμε
     tr.flags.rec = now;
     const key = tr.cls.startsWith('custom:') ? tr.cls : tr.personId ? 'person:' + tr.personId : tr.cls;
@@ -581,7 +581,8 @@ async function learnPerson(name, existing) {
     await waitSilence();
     const descs = [];
     const t0 = Date.now();
-    while (descs.length < 5 && Date.now() - t0 < 10000) {
+    st.learningFaces = true;
+    while (descs.length < 5 && Date.now() - t0 < 40000) {
       const faces = await detectFaces(video);
       if (faces.length) {
         const f = faces.reduce((a, b) => (b.box.w * b.box.h > a.box.w * a.box.h ? b : a));
@@ -598,7 +599,7 @@ async function learnPerson(name, existing) {
     say(`Έμαθα ${name}. Η εικόνα αποθηκεύεται μόνο στη συσκευή σας. Θα τον αναφέρω με το όνομά του όταν τον βλέπω.`, { priority: 2 });
   } catch (e) {
     console.error(e); say('Δεν μπόρεσα να φορτώσω την αναγνώριση προσώπων.', { priority: 2 });
-  } finally { st.busy = false; }
+  } finally { st.busy = false; st.learningFaces = false; }
 }
 
 async function savePlace(name) {
@@ -847,7 +848,7 @@ async function warmOfflineCache() {
   const urls = ['models/efficientdet_lite2.tflite', 'face-api/face-api.js', 'face-api/model/tiny_face_detector_model-weights_manifest.json', 'face-api/model/tiny_face_detector_model.bin',
     'face-api/model/face_landmark_68_tiny_model-weights_manifest.json', 'face-api/model/face_landmark_68_tiny_model.bin',
     'face-api/model/face_recognition_model-weights_manifest.json', 'face-api/model/face_recognition_model.bin',
-    'tesseract/tesseract.min.js', 'tesseract/worker.min.js', 'tesseract/tesseract-core-simd-lstm.wasm.js', 'tesseract/tesseract-core-lstm.wasm.js',
+    'tesseract/tesseract.min.js', 'tesseract/worker.min.js', 'tesseract/tesseract-core-relaxedsimd-lstm.wasm.js', 'tesseract/tesseract-core-simd-lstm.wasm.js', 'tesseract/tesseract-core-lstm.wasm.js',
     'tesseract/ell.traineddata.gz', 'tesseract/eng.traineddata.gz'].map(u => new URL('../vendor/' + u, import.meta.url).href);
   const out = $('offlineOut'); let done = 0;
   for (const u of urls) { try { await fetch(u); } catch { /* συνέχισε */ } out.textContent = `Προφόρτωση ${++done}/${urls.length}…`; }

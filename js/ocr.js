@@ -41,8 +41,8 @@ function prepare(video) {
 export async function readText(video) {
   const worker = await getWorker();
   const { data } = await worker.recognize(prepare(video));
-  // Κρατάμε γραμμές με επαρκή βεβαιότητα και αρκετά γράμματα
-  const lines = (data.lines || []).filter(l => l.confidence > 55 && /[\p{L}\p{N}]{2,}/u.test(l.text));
-  const text = lines.map(l => l.text.trim()).join('. ').replace(/\s+/g, ' ').trim();
+  // Τα v6+ επιστρέφουν απλό κείμενο· κρατάμε γραμμές με αρκετά γράμματα
+  const lines = String(data.text || '').split('\n').map(l => l.trim()).filter(l => /[\p{L}\p{N}]{2,}/u.test(l));
+  const text = lines.join('. ').replace(/\s+/g, ' ').trim();
   return { text, confidence: data.confidence };
 }

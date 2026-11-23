@@ -100,8 +100,8 @@ ok('μνήμη: «πού άφησα» απαντά με πότε το είδε',
 await page.evaluate(() => window.__setImg('portrait'));
 await page.waitForTimeout(800);
 await page.evaluate(() => window.__sv.handleUtterance(['αυτός είναι ο Γιάννης']));
-await page.waitForFunction(() => window.__sv.memory.people.length === 1 || /Δεν είδα|Δεν μπόρεσα/.test(window.__said.slice(-1)[0] || ''), null, { timeout: 90000 }).catch(() => {});
-await page.waitForFunction(() => !window.__sv.st.busy, null, { timeout: 30000 }).catch(() => {});
+await page.waitForFunction(() => window.__sv.memory.people.length === 1 || /Δεν είδα|Δεν μπόρεσα/.test(window.__said.slice(-1)[0] || ''), null, { timeout: 120000 }).catch(() => {});
+await page.waitForFunction(() => !window.__sv.st.busy, null, { timeout: 60000 }).catch(() => {});
 ok('εκμάθηση προσώπου', await page.evaluate(() => window.__sv.memory.people.length) === 1, (await said()).slice(-1)[0]);
 
 // ---- OCR ----
@@ -115,13 +115,13 @@ ok('OCR διαβάζει κείμενο', s.some(x => /HELLO|WORLD|ΚΛΕΙΔΙ�
 
 // ---- Πυξίδα / σάρωση ----
 await page.evaluate(() => window.__setImg('tennis'));
-await page.evaluate(() => { window.dispatchEvent(Object.assign(new Event('deviceorientation'), { alpha: 0, beta: 90, gamma: 0, absolute: true })); });
+await page.evaluate(() => { for (const n of ['deviceorientationabsolute', 'deviceorientation']) window.dispatchEvent(Object.assign(new Event(n), { alpha: 0, beta: 90, gamma: 0, absolute: true })); });
 await page.waitForTimeout(300);
 ok('πυξίδα διαβάζεται', await page.evaluate(() => window.__sv.sensors.headingNow()) !== null, String(await page.evaluate(() => window.__sv.sensors.headingNow())));
 await page.evaluate(() => window.__sv.handleUtterance(['κάνε σάρωση']));
 ok('σάρωση ξεκινά', await page.evaluate(() => window.__sv.scan.active));
 for (let a = 0; a < 360; a += 20) { // προσομοίωση στροφής 360°
-  await page.evaluate((al) => window.dispatchEvent(Object.assign(new Event('deviceorientation'), { alpha: 360 - al, beta: 90, gamma: 0, absolute: true })), a);
+  await page.evaluate((al) => { for (const n of ['deviceorientationabsolute', 'deviceorientation']) window.dispatchEvent(Object.assign(new Event(n), { alpha: 360 - al, beta: 90, gamma: 0, absolute: true })); }, a);
   await page.waitForTimeout(450);
 }
 await page.waitForFunction(() => !window.__sv.scan.active, null, { timeout: 15000 }).catch(() => {});
@@ -139,7 +139,7 @@ const sw = await page.evaluate(async () => { const r = await navigator.serviceWo
 ok('service worker + cache', sw.reg && sw.caches.length > 0, JSON.stringify(sw));
 
 await page.screenshot({ path: '/tmp/probe/shot-app.png' });
-const realErrors = errors.filter(e => !/favicon|net::ERR_|Failed to load resource/.test(e));
+const realErrors = errors.filter(e => !/favicon|net::ERR_|Failed to load resource|Parameter not found|Estimating resolution|Detected \d+ diacritics/.test(e));
 ok('χωρίς σφάλματα JS', realErrors.length === 0, realErrors.slice(0, 4).join(' ; '));
 await browser.close();
 const failed = results.filter(r => !r[1]).length;
