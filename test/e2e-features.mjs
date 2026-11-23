@@ -74,8 +74,7 @@ await page.evaluate(() => { window.__fakeCar = false; });
 // ---- Τι είναι αυτό ----
 await page.evaluate(() => window.__setImg('tennis'));
 await page.waitForFunction(() => window.__sv.st.tracks.some(t => t.cls === 'tennis racket' && t.hits >= 2), null, { timeout: 30000 }).catch(() => {});
-console.log('DBG2', JSON.stringify(await page.evaluate(async () => { const v = document.getElementById('video'); const c = document.createElement('canvas'); c.width = 64; c.height = 64; const g = c.getContext('2d'); g.drawImage(v, 0, 0, 64, 64); const d = g.getImageData(0, 0, 64, 64).data; let s = 0; for (let i = 0; i < d.length; i += 4) s += d[i]; return { luma: s / 4096, raw: window.__sv.detector.detect(v, performance.now() + 100000).map(x => x.cls + ':' + x.score.toFixed(2)), min: JSON.parse(localStorage.getItem('secondvision.settings.v1')).minScore, lastVT: window.__sv.st.lastVideoTime, vt: v.currentTime, rs: v.readyState }; })));
-console.log('DBG', JSON.stringify(await page.evaluate(() => ({ n: window.__sv.st.tracks.length, hits: window.__sv.st.tracks.map(t => t.cls + ':' + t.hits), busy: window.__sv.st.busy, paused: window.__sv.st.paused, fps: window.__sv.st.fps, mode: JSON.parse(localStorage.getItem('secondvision.settings.v1')).mode }))));
+await page.waitForTimeout(1500);
 await page.evaluate(() => { window.__said.length = 0; });
 await page.evaluate(() => window.__sv.handleUtterance(['τι αντικείμενο είναι αυτό']));
 await page.waitForFunction(() => !window.__sv.st.busy && window.__said.length > 1, null, { timeout: 90000 }).catch(() => {});
