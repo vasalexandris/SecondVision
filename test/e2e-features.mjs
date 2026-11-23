@@ -74,6 +74,7 @@ await page.evaluate(() => { window.__fakeCar = false; });
 // ---- Τι είναι αυτό ----
 await page.evaluate(() => window.__setImg('tennis'));
 await page.waitForFunction(() => window.__sv.st.tracks.some(t => t.cls === 'tennis racket' && t.hits >= 2), null, { timeout: 30000 }).catch(() => {});
+console.log('DBG', JSON.stringify(await page.evaluate(() => ({ n: window.__sv.st.tracks.length, hits: window.__sv.st.tracks.map(t => t.cls + ':' + t.hits), busy: window.__sv.st.busy, paused: window.__sv.st.paused, fps: window.__sv.st.fps, mode: JSON.parse(localStorage.getItem('secondvision.settings.v1')).mode }))));
 await page.evaluate(() => { window.__said.length = 0; });
 await page.evaluate(() => window.__sv.handleUtterance(['τι αντικείμενο είναι αυτό']));
 await page.waitForFunction(() => !window.__sv.st.busy && window.__said.length > 1, null, { timeout: 90000 }).catch(() => {});
