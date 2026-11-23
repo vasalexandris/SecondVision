@@ -45,7 +45,9 @@
 node tools/serve.mjs 8080      # τοπικά: http://localhost:8080
 ```
 
-Για χρήση στο κινητό ανεβάστε τον φάκελο σε οποιονδήποτε στατικό host με HTTPS (GitHub Pages, Vercel, Netlify…) και
+**GitHub Pages (έτοιμο):** μετά από κάθε push στο `main` η εφαρμογή δημοσιεύεται αυτόματα στο `https://<χρήστης>.github.io/SecondVision/`. Μία φορά: Settings → Pages → Source: **GitHub Actions**.
+
+Για άλλο host: ανεβάστε τον φάκελο σε οποιονδήποτε στατικό host με HTTPS (GitHub Pages, Vercel, Netlify…) και
 «Προσθήκη στην αρχική οθόνη». Δεν υπάρχει βήμα build.
 
 Την πρώτη φορά (με internet) ανοίξτε την εφαρμογή και, από τις Ρυθμίσεις, πατήστε **«Προφόρτωση όλων»** ώστε να
