@@ -19,13 +19,6 @@ export class Sensors {
   }
 
   async #startOrientation() {
-    try {
-      // iOS: χρειάζεται άδεια μέσα σε χειρονομία χρήστη
-      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        const r = await DeviceOrientationEvent.requestPermission();
-        if (r !== 'granted') return;
-      }
-    } catch { return; }
     const handler = (e) => {
       if (e.alpha == null || e.beta == null) return;
       const cam = cameraDirection(e.alpha, e.beta, e.gamma ?? 0);
@@ -50,6 +43,13 @@ export class Sensors {
     };
     if ('ondeviceorientationabsolute' in window) window.addEventListener('deviceorientationabsolute', handler, true);
     window.addEventListener('deviceorientation', (e) => { if (!('ondeviceorientationabsolute' in window)) handler(e); }, true);
+    // iOS (και νεότερα Chrome): χρειάζεται άδεια μέσα σε χειρονομία χρήστη. Οι listeners υπάρχουν ήδη,
+    // οπότε αν η άδεια δοθεί αργότερα ή απορριφθεί, απλώς δεν θα φτάνουν γεγονότα.
+    try {
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        await Promise.race([DeviceOrientationEvent.requestPermission(), new Promise(r => setTimeout(r, 4000))]);
+      }
+    } catch { /* αγνόησε */ }
   }
 
   #startGeo() {

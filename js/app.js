@@ -333,7 +333,7 @@ function describeSighting(s) {
 }
 function sameSpot(s) {
   const pos = sensors.freshPosition();
-  if (!pos || s.lat == null) return s.lat == null; // χωρίς GPS δεν μπορούμε να αποκλείσουμε το ίδιο σημείο
+  if (!pos || s.lat == null) return true; // χωρίς φρέσκο GPS δεν μπορούμε να αποκλείσουμε το ίδιο σημείο
   const v = G.geoVector(pos.lat, pos.lon, s.lat, s.lon);
   return v.distance < Math.max(25, (pos.acc || 0) + (s.acc || 0));
 }
