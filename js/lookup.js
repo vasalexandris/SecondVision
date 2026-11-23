@@ -73,17 +73,22 @@ export async function askVision(apiKey, base64, hints = {}) {
 const GEMINI = 'https://generativelanguage.googleapis.com/v1beta';
 let geminiModelCache = null;
 
-/** Λίστα μοντέλων που υποστηρίζουν generateContent, με πρώτα τα πιο πρόσφατα «flash». */
+/** Σειρά προτίμησης: πρώτα σταθερά «flash» (γρήγορα, φθηνά, με δωρεάν όριο), μετά «flash-lite», τελευταία «pro»/preview (συχνά χωρίς δωρεάν όριο). */
+export function rankModels(names) {
+  const ver = n => parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)/) || [0, 0])[1]);
+  const tier = n => (/pro/.test(n) ? 4 : 0) + (/preview|exp|thinking/.test(n) ? 2 : 0) + (/flash/.test(n) ? 0 : 1) + (/lite|8b/.test(n) ? 0.5 : 0);
+  return [...names].sort((a, b) => tier(a) - tier(b) || ver(b) - ver(a));
+}
+
+/** Λίστα μοντέλων που υποστηρίζουν generateContent, ταξινομημένη κατά προτίμηση. */
 export async function listGeminiModels(key) {
   const res = await fetch(`${GEMINI}/models?pageSize=200`, { headers: { 'x-goog-api-key': key }, signal: timeout(10000) });
-  if (!res.ok) throw new Error('models ' + res.status);
+  if (!res.ok) { const e = new Error('models ' + res.status); e.status = res.status; throw e; }
   const j = await res.json();
-  const ver = n => parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)/) || [0, 0])[1]);
-  return (j.models || [])
+  return rankModels((j.models || [])
     .filter(m => /gemini/i.test(m.name) && (m.supportedGenerationMethods || []).includes('generateContent') &&
-      !/embedding|tts|image-generation|live|audio|robotics|computer-use|thinking-exp/i.test(m.name))
-    .map(m => m.name.replace(/^models\//, ''))
-    .sort((a, b) => ver(b) - ver(a) || (/flash/.test(b) - /flash/.test(a)) || (/lite|8b/.test(a) - /lite|8b/.test(b)));
+      !/embedding|tts|image-generation|live|audio|robotics|computer-use|thinking-exp|vision-latest/i.test(m.name))
+    .map(m => m.name.replace(/^models\//, '')));
 }
 
 async function geminiCall(key, model, parts, generationConfig) {
@@ -92,26 +97,41 @@ async function geminiCall(key, model, parts, generationConfig) {
     headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
     body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: { temperature: 0.2, maxOutputTokens: 600, ...generationConfig } })
   });
-  if (!res.ok) { const e = new Error('gemini ' + res.status); e.status = res.status; throw e; }
+  if (!res.ok) {
+    let detail = ''; try { detail = (await res.json())?.error?.message || ''; } catch { /* αγνόησε */ }
+    const e = new Error(`gemini ${res.status} ${detail}`.trim()); e.status = res.status; e.model = model; throw e;
+  }
   const j = await res.json();
   return (j.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join(' ').trim();
 }
 
-/** Δοκιμάζει το προτιμώμενο μοντέλο· αν δεν υπάρχει (404/400), επιλέγει αυτόματα το καλύτερο διαθέσιμο. */
+// Σφάλματα που αφορούν ΜΟΝΟ το συγκεκριμένο μοντέλο (δεν υπάρχει / δεν έχει όριο / υπερφορτωμένο) → δοκιμάζουμε το επόμενο
+const MODEL_ERRORS = [400, 404, 429, 500, 503];
+
+/** Δοκιμάζει το επιλεγμένο μοντέλο· αν αποτύχει για λόγους μοντέλου, δοκιμάζει αυτόματα τα επόμενα της λίστας. */
 export async function geminiGenerate(key, preferred, parts, generationConfig) {
   const tried = [];
+  let lastErr;
   const attempt = async (m) => { tried.push(m); const t = await geminiCall(key, m, parts, generationConfig); geminiModelCache = m; return t; };
   const first = preferred || geminiModelCache;
   if (first) {
-    try { return await attempt(first); } catch (e) { if (![400, 404].includes(e.status)) throw e; }
+    try { return await attempt(first); } catch (e) { if (!MODEL_ERRORS.includes(e.status)) throw e; lastErr = e; }
   }
   const models = await listGeminiModels(key);
-  for (const m of models.filter(m => !tried.includes(m)).slice(0, 3)) {
-    try { return await attempt(m); } catch (e) { if (![400, 404].includes(e.status)) throw e; }
+  for (const m of models.filter(m => !tried.includes(m)).slice(0, 4)) {
+    try { return await attempt(m); } catch (e) { if (!MODEL_ERRORS.includes(e.status)) throw e; lastErr = e; }
   }
-  throw new Error('no gemini model');
+  throw lastErr || new Error('no gemini model');
 }
 export const lastGeminiModel = () => geminiModelCache;
+
+/** Δοκιμή κλειδιού+μοντέλου με μικρό αίτημα. Επιστρέφει {ok, status, message}. */
+export async function testGemini(key, model) {
+  try {
+    const t = await geminiCall(key, model, [{ text: 'Απάντησε μόνο με τη λέξη OK.' }], { maxOutputTokens: 20 });
+    return { ok: true, status: 200, message: t.slice(0, 40) };
+  } catch (e) { return { ok: false, status: e.status || 0, message: e.message }; }
+}
 
 const PROMPTS = {
   identify: (h) => 'Βοηθάς έναν τυφλό χρήστη. Το αντικείμενο που κρατά ή δείχνει είναι συνήθως στο κέντρο της εικόνας. ' +
@@ -129,11 +149,14 @@ const PROMPTS = {
 export async function cloudAnalyze(cfg, base64, kind, hints = {}) {
   const prompt = PROMPTS[kind](hints);
   let raw;
+  const viaClaude = () => askVision(cfg.cloudKey, base64, { ...hints, _prompt: prompt });
   if (cfg.geminiKey) {
-    raw = await geminiGenerate(cfg.geminiKey, cfg.geminiModel, [{ inline_data: { mime_type: 'image/jpeg', data: base64 } }, { text: prompt }],
-      kind === 'identify' ? { responseMimeType: 'application/json' } : kind === 'read' ? { maxOutputTokens: 2000 } : undefined);
+    try {
+      raw = await geminiGenerate(cfg.geminiKey, cfg.geminiModel, [{ inline_data: { mime_type: 'image/jpeg', data: base64 } }, { text: prompt }],
+        kind === 'identify' ? { responseMimeType: 'application/json' } : kind === 'read' ? { maxOutputTokens: 2000 } : undefined);
+    } catch (e) { if (!cfg.cloudKey) throw e; raw = await viaClaude(); } // αν έχει και κλειδί Claude, δοκιμάζεται ως εφεδρικό
   } else if (cfg.cloudKey) {
-    raw = await askVision(cfg.cloudKey, base64, { ...hints, _prompt: prompt });
+    raw = await viaClaude();
   } else throw new Error('no key');
   if (kind !== 'identify') return { description: raw };
   try {

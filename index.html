@@ -89,9 +89,12 @@
     <p class="muted">Βάλτε εδώ το κλειδί σας από το Google AI Studio. Μετά, οι εντολές «τι βλέπεις», «διάβασε» και «τι είναι αυτό» θα χρησιμοποιούν το Gemini όταν υπάρχει internet.</p>
     <label class="row"><input id="setWeb" type="checkbox"> Αναζήτηση στη Wikipedia (στέλνει μόνο λέξεις, ποτέ εικόνα)</label>
     <label>Κλειδί Google Gemini (προαιρετικό) <input id="setGemini" type="password" autocomplete="off" placeholder="AIza…"></label>
-    <label>Μοντέλο Gemini <input id="setGeminiModel" type="text" list="geminiModels" placeholder="κενό = αυτόματη επιλογή του καλύτερου διαθέσιμου"></label>
-    <datalist id="geminiModels"></datalist>
-    <button id="btnGeminiTest">🔑 Έλεγχος κλειδιού / λίστα μοντέλων</button> <span id="geminiOut" class="muted"></span>
+    <button id="btnGeminiTest">🔑 Έλεγχος κλειδιού & φόρτωση μοντέλων</button>
+    <p id="geminiOut" class="muted" role="status"></p>
+    <label>Μοντέλο Gemini
+      <select id="setGeminiModel"><option value="">Αυτόματο (προτείνεται: δοκιμάζει φθηνά μοντέλα πρώτα)</option></select>
+    </label>
+    <button id="btnGeminiModelTest">▶️ Δοκιμή επιλεγμένου μοντέλου</button>
     <label>Εναλλακτικά: κλειδί Claude API <input id="setKey" type="password" autocomplete="off" placeholder="sk-ant-…"></label>
     <p class="muted"><b>Προσοχή ιδιωτικότητας:</b> με κλειδί, η φωτογραφία στέλνεται στον πάροχο μόνο όταν ζητήσετε «τι είναι αυτό» ή «περίγραψε αναλυτικά». Στο δωρεάν επίπεδο του Gemini, η Google μπορεί να χρησιμοποιεί τα δεδομένα για βελτίωση των προϊόντων της — μην τη χρησιμοποιείτε για προσωπικά έγγραφα ή πρόσωπα. Τα κλειδιά μένουν μόνο σε αυτή τη συσκευή.</p>
   </section>

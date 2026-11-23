@@ -53,6 +53,7 @@ await page.route('https://generativelanguage.googleapis.com/**', route => {
     { name: 'models/gemini-2.5-flash', supportedGenerationMethods: ['generateContent'] }, { name: 'models/gemini-3.1-flash', supportedGenerationMethods: ['generateContent'] },
     { name: 'models/text-embedding-004', supportedGenerationMethods: ['embedContent'] }] }) });
   if (u.includes('gemini-3.8-flash')) return route.fulfill({ status: 404, headers: h, body: '{}' });
+  if (u.includes('gemini-3.1-flash:')) return route.fulfill({ status: 429, headers: h, contentType: 'application/json', body: JSON.stringify({ error: { message: 'Quota exceeded, limit: 0' } }) });
   const body = JSON.parse(route.request().postData());
   const prompt = body.contents[0].parts.find(p => p.text).text; const hasImg = body.contents[0].parts.some(p => p.inline_data?.data?.length > 1000);
   const text = !hasImg ? 'ΧΩΡΙΣ ΕΙΚΟΝΑ' : /JSON/.test(prompt) ? JSON.stringify({ name: 'κλειδί', description: 'Μεταλλικό κλειδί κλειδαριάς. Φαίνεται παλιό.' }) : /Διάβασε ολόκληρο/.test(prompt) ? 'ΓΑΛΑ ΔΕΛΤΑ. Πλήρες. Ένα λίτρο.' : 'Μπροστά σας υπάρχει ένα κομοδίνο με φωτιστικό. Δεξιά είναι ένα κρεβάτι.';
@@ -71,7 +72,7 @@ await page.evaluate(() => { window.__said.length = 0; window.__sv.st.testConfirm
 await page.evaluate(() => window.__sv.identify(null));
 let s = await said();
 ok('Gemini: «τι είναι αυτό» δίνει όνομα και περιγραφή', s.some(x => /κλειδί\. Μεταλλικό κλειδί/.test(x) || /Μεταλλικό κλειδί/.test(x)), s.join(' | '));
-ok('Gemini: το άγνωστο μοντέλο (404) αντικαθίσταται αυτόματα από τη λίστα', calls.some(c => c.includes('gemini-3.1-flash:generateContent')), calls.join(','));
+ok('Gemini: άγνωστο (404) ή χωρίς όριο (429) μοντέλο → αυτόματη μετάβαση στο επόμενο', calls.some(c => c.includes('gemini-3.1-flash:generateContent')) && calls.some(c => c.includes('gemini-2.5-flash:generateContent')), calls.join(','));
 ok('Gemini: δεν επιλέγονται μοντέλα embedding', !calls.some(c => c.includes('embedding')));
 ok('Μάθηση: αποθηκεύεται το αντικείμενο που είπε το cloud', await page.evaluate(() => window.__sv.memory.items.some(i => i.name === 'κλειδί' && i.embeddings.length >= 3)));
 ok('Μάθηση: ρωτά πριν αποθηκεύσει', s.some(x => /Θέλετε να το θυμάμαι ως κλειδί/.test(x)));
@@ -93,6 +94,11 @@ ok('«διάβασε» φωτογραφίζει και διαβάζει με Gem
 ok('chip ☁️ δείχνει Gemini', (await page.textContent('#chipCloud')).includes('Gemini'), await page.textContent('#chipCloud'));
 await page.click('#btnSettings');
 ok('πεδίο κλειδιού Gemini ορατό στις ρυθμίσεις', await page.isVisible('#setGemini'));
+await page.click('#btnGeminiTest');
+await page.waitForFunction(() => /Επιλέχθηκε/.test(document.getElementById('geminiOut').textContent), null, { timeout: 20000 }).catch(() => {});
+ok('κουμπί δοκιμής: παραλείπει το 429 και επιλέγει μοντέλο που δουλεύει', /Επιλέχθηκε το gemini-2\.5-flash/.test(await page.textContent('#geminiOut')), await page.textContent('#geminiOut'));
+ok('επιλογέας μοντέλου γεμίζει από τα διαθέσιμα (χωρίς embedding)', (await page.$$eval('#setGeminiModel option', o => o.map(x => x.value))).join(',').includes('gemini-3.1-flash') && !(await page.$$eval('#setGeminiModel option', o => o.map(x => x.value))).some(v => /embedding/.test(v)));
+ok('το επιλεγμένο μοντέλο αποθηκεύεται', await page.evaluate(() => JSON.parse(localStorage.getItem('secondvision.settings.v1')).geminiModel) === 'gemini-2.5-flash');
 // Χωρίς κλειδί → τοπική περιγραφή
 await page.evaluate(() => { const st = JSON.parse(localStorage.getItem('secondvision.settings.v1')); });
 await browser.close();

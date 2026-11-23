@@ -9,7 +9,7 @@ import { Detector, Embedder, frameLuma } from './vision.js';
 import { Tracker } from './tracker.js';
 import { loadFaces, detectFaces, matchPerson, facesLoaded } from './faces.js';
 import { readText } from './ocr.js';
-import { wikiLookup, cropFrame, cloudAnalyze, listGeminiModels, lastGeminiModel } from './lookup.js';
+import { wikiLookup, cropFrame, cloudAnalyze, listGeminiModels, testGemini, lastGeminiModel } from './lookup.js';
 import { parseCommand, norm, resolveTarget } from './commands.js';
 import { classInfo, classCandidates, pluralize, HAZARD_CLASSES, WALK_CATS, S } from './lang-el.js';
 import * as G from './spatial.js';
@@ -662,7 +662,7 @@ async function doRead() {
         via = 'cloud';
       } catch (e) {
         console.warn('cloud read', e);
-        if (e.status === 429) say('Το όριο χρήσης του cloud μοντέλου εξαντλήθηκε. Δοκιμάζω την τοπική ανάγνωση.', { priority: 2 });
+        say(cloudErrorText(e) + ' Δοκιμάζω την τοπική ανάγνωση.', { priority: 2 });
       }
     }
     if (!text) { try { text = (await readText(canvas)).text; via = 'local'; } catch (e) { console.warn('ocr', e); } }
@@ -713,7 +713,7 @@ async function identify(hint) {
       try {
         const r = await cloudAnalyze(settings, base64, 'identify', { label, text });
         if (r.description) { parts.length = 0; parts.push(r.name ? `${r.name}. ${r.description}` : r.description); described = true; cloudName = r.name || ''; }
-      } catch (e) { console.warn('cloud', e); parts.push(e.status === 429 ? 'Το όριο χρήσης του cloud μοντέλου εξαντλήθηκε προς το παρόν.' : 'Η περιγραφή από το διαδίκτυο απέτυχε.'); }
+      } catch (e) { console.warn('cloud', e); parts.push(cloudErrorText(e)); }
     }
     // 3) Αναζήτηση στη Wikipedia με λέξεις (είδος + κείμενο ετικέτας)
     if (!described && online && settings.webLookup && (label || text)) {
@@ -748,6 +748,12 @@ async function identify(hint) {
   finally { st.busy = false; }
 }
 
+/** Κατανοητό μήνυμα για σφάλματα cloud (χωρίς να κατηγορεί «όριο» όταν είναι άλλο πρόβλημα). */
+function cloudErrorText(e) {
+  if (e.status === 429) return 'Το Gemini δεν έδωσε διαθέσιμο όριο χρήσης για τα μοντέλα που δοκίμασα. Ανοίξτε τις ρυθμίσεις και πατήστε έλεγχο κλειδιού για να επιλέξετε άλλο μοντέλο.';
+  if (e.status === 401 || e.status === 403) return 'Το κλειδί δεν έγινε δεκτό. Ελέγξτε το στις ρυθμίσεις.';
+  return 'Η περιγραφή από το διαδίκτυο απέτυχε.';
+}
 const hasCloud = () => !!(settings.geminiKey || settings.cloudKey);
 
 /** «Περίγραψε αναλυτικά»: πλήρης περιγραφή της σκηνής από cloud μοντέλο όρασης (πολύ περισσότερα αντικείμενα από τις 80 κατηγορίες). */
@@ -766,7 +772,7 @@ async function describeDeep() {
     for (const c of r.description.match(/[^.]{1,220}(\.|$)/g) || [r.description]) voice.speak(c.trim(), { priority: 2 });
   } catch (e) {
     console.warn(e); chime.error();
-    say(e.status === 429 ? 'Το όριο χρήσης του cloud μοντέλου εξαντλήθηκε. Δοκιμάστε σε λίγο.' : 'Η αναλυτική περιγραφή απέτυχε. Σας λέω τι αναγνωρίζω τοπικά.', { priority: 2 });
+    say(cloudErrorText(e) + ' Σας λέω τι αναγνωρίζω τοπικά.', { priority: 2 });
     describeScene();
   } finally { st.busy = false; }
 }
@@ -968,12 +974,19 @@ function syncUI() {
   $('setVolume').value = settings.volume * 10; $('setRate').value = settings.rate * 10;
   $('setVoice').checked = settings.voice; $('setBeeps').checked = settings.beeps; $('setHaptics').checked = settings.haptics;
   $('setTorch').checked = settings.autoTorch; $('setHands').checked = settings.handsFree; $('setVideo').checked = settings.showVideo;
-  $('setFaces').checked = settings.faces; $('setWeb').checked = settings.webLookup; $('setKey').value = settings.cloudKey; $('setGemini').value = settings.geminiKey; $('setGeminiModel').value = settings.geminiModel; $('setVerbosity').value = settings.verbosity; $('setMode').value = settings.mode;
+  $('setFaces').checked = settings.faces; $('setWeb').checked = settings.webLookup; $('setKey').value = settings.cloudKey; $('setGemini').value = settings.geminiKey;  $('setVerbosity').value = settings.verbosity; $('setMode').value = settings.mode;
   $('setDelay').value = settings.voiceDelay; $('setScore').value = Math.round(settings.minScore * 100); $('setModel').value = settings.model;
   $('setFov').value = settings.fovLong;
   $('delayOut').textContent = settings.voiceDelay + ' δ'; $('scoreOut').textContent = Math.round(settings.minScore * 100) + '%';
   $('fovOut').textContent = settings.fovLong + '°'; $('volOut').textContent = Math.round(settings.volume * 10); $('rateOut').textContent = settings.rate.toFixed(1) + '×';
   document.body.classList.toggle('hide-video', !settings.showVideo);
+}
+
+function renderGeminiModels() {
+  const sel = $('setGeminiModel'); const cur = settings.geminiModel;
+  const list = [...new Set([...(settings.geminiModels || []), ...(cur ? [cur] : [])])];
+  sel.innerHTML = '<option value="">Αυτόματο (προτείνεται: δοκιμάζει φθηνά μοντέλα πρώτα)</option>' + list.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+  sel.value = cur;
 }
 
 function renderMemory() {
@@ -1039,15 +1052,32 @@ function bindUI() {
   });
   bind('setVolume', 'volume', v => v / 10); bind('setRate', 'rate', v => v / 10);
   bind('setVoice', 'voice'); bind('setBeeps', 'beeps'); bind('setHaptics', 'haptics'); bind('setTorch', 'autoTorch'); bind('setVideo', 'showVideo');
-  bind('setFaces', 'faces'); bind('setWeb', 'webLookup'); bind('setKey', 'cloudKey', v => v.trim()); bind('setGemini', 'geminiKey', v => v.trim()); bind('setGeminiModel', 'geminiModel', v => v.trim());
+  bind('setFaces', 'faces'); bind('setWeb', 'webLookup'); bind('setKey', 'cloudKey', v => v.trim()); bind('setGemini', 'geminiKey', v => v.trim()); bind('setGeminiModel', 'geminiModel', v => v.trim(), 'change');
+  const geminiMsg = (r) => r.ok ? '✅ δουλεύει' : r.status === 429 ? '❌ 429: δεν υπάρχει διαθέσιμο όριο (quota) για αυτό το μοντέλο στο λογαριασμό σου' :
+    r.status === 403 || r.status === 401 ? '❌ το κλειδί δεν έγινε δεκτό (' + r.status + ')' : `❌ σφάλμα ${r.status || ''} ${r.message}`.slice(0, 140);
   $('btnGeminiTest').onclick = async () => {
-    const out = $('geminiOut'); out.textContent = 'Έλεγχος…';
+    const out = $('geminiOut');
+    if (!settings.geminiKey) { out.textContent = 'Βάλτε πρώτα το κλειδί Gemini.'; return; }
+    out.textContent = 'Έλεγχος κλειδιού…';
     try {
       const list = await listGeminiModels(settings.geminiKey);
-      $('geminiModels').innerHTML = list.map(m => `<option value="${escapeHtml(m)}">`).join('');
-      out.textContent = `Το κλειδί δουλεύει. ${list.length} μοντέλα διαθέσιμα. Πρώτα: ${list.slice(0, 4).join(', ')}`;
-    } catch (e) { out.textContent = 'Αποτυχία: ' + e.message + ' (έλεγξε το κλειδί και τη σύνδεση)'; }
-  }; bind('setVerbosity', 'verbosity', Number, 'change'); bind('setMode', 'mode', v => v, 'change');
+      settings.geminiModels = list; renderGeminiModels();
+      out.textContent = `Το κλειδί έγινε δεκτό. ${list.length} μοντέλα. Δοκιμάζω τα πρώτα…`;
+      for (const m of list.slice(0, 5)) {
+        const r = await testGemini(settings.geminiKey, m);
+        out.textContent = `${m}: ${geminiMsg(r)}`;
+        if (r.ok) { settings.geminiModel = m; renderGeminiModels(); out.textContent = `✅ Επιλέχθηκε το ${m} (δουλεύει με το κλειδί σου).`; return; }
+      }
+      out.textContent = 'Κανένα από τα πρώτα μοντέλα δεν απάντησε. Δοκίμασε άλλο από τη λίστα ή έλεγξε τα όρια στο Google AI Studio.';
+    } catch (e) { out.textContent = e.status === 400 || e.status === 403 ? '❌ Το κλειδί δεν έγινε δεκτό.' : 'Αποτυχία: ' + e.message + ' (έλεγξε σύνδεση και κλειδί)'; }
+  };
+  $('btnGeminiModelTest').onclick = async () => {
+    const out = $('geminiOut'); const m = settings.geminiModel || settings.geminiModels[0];
+    if (!settings.geminiKey || !m) { out.textContent = 'Βάλτε κλειδί και πατήστε πρώτα «Έλεγχος κλειδιού».'; return; }
+    out.textContent = `Δοκιμή ${m}…`; out.textContent = `${m}: ${geminiMsg(await testGemini(settings.geminiKey, m))}`;
+  };
+  renderGeminiModels();
+bind('setVerbosity', 'verbosity', Number, 'change'); bind('setMode', 'mode', v => v, 'change');
   bind('setDelay', 'voiceDelay', Number); bind('setScore', 'minScore', v => v / 100); bind('setFov', 'fovLong', Number);
   $('setHands').addEventListener('change', e => {
     settings.handsFree = e.target.checked;
