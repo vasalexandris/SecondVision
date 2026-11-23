@@ -99,10 +99,10 @@ ok('μνήμη: «πού άφησα» απαντά με πότε το είδε',
 // ---- Πρόσωπα ----
 await page.evaluate(() => window.__setImg('portrait'));
 await page.waitForTimeout(800);
-await page.evaluate(() => window.__sv.handleUtterance(['αυτός είναι ο Γιάννης']));
+await page.evaluate(() => { window.__said.length = 0; return window.__sv.handleUtterance(['αυτός είναι ο Γιάννης']); });
 await page.waitForFunction(() => window.__sv.memory.people.length === 1, null, { timeout: 150000 }).catch(() => {});
 await page.waitForFunction(() => !window.__sv.st.busy, null, { timeout: 60000 }).catch(() => {});
-ok('εκμάθηση προσώπου', await page.evaluate(() => window.__sv.memory.people.length) === 1, (await said()).slice(-1)[0]);
+ok('εκμάθηση προσώπου', await page.evaluate(() => window.__sv.memory.people.length) === 1, (await said()).filter(x => /πρόσωπ|Γιάννη|Δεν/.test(x)).join(' | '));
 
 // ---- OCR ----
 await page.evaluate(() => window.__setText('ΚΛΕΙΔΙΑ ΣΠΙΤΙ|HELLO WORLD'));
