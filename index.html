@@ -61,6 +61,7 @@
   <nav class="quick" aria-label="Γρήγορες ενέργειες">
     <button id="qDescribe">👁️<span>Τι βλέπεις</span></button>
     <button id="qScan">🔄<span>Σάρωση 360°</span></button>
+    <button id="qDeep">🧠<span>Αναλυτικά</span></button>
     <button id="qIdentify">🔎<span>Τι είναι αυτό</span></button>
     <button id="qRead">📖<span>Διάβασε</span></button>
     <button id="qTorch">🔦<span>Φακός</span></button>
@@ -115,8 +116,12 @@
   <section>
     <h3>«Τι είναι αυτό;» — αναζήτηση στο διαδίκτυο</h3>
     <label class="row"><input id="setWeb" type="checkbox"> Αναζήτηση στη Wikipedia (στέλνει μόνο λέξεις, ποτέ εικόνα)</label>
-    <label>Προαιρετικό: κλειδί Claude API για περιγραφή από εικόνα <input id="setKey" type="password" autocomplete="off" placeholder="sk-ant-…"></label>
-    <p class="muted">Αν βάλετε κλειδί, η φωτογραφία του αντικειμένου στέλνεται στην Anthropic μόνο όταν ζητήσετε «τι είναι αυτό». Το κλειδί μένει μόνο σε αυτή τη συσκευή.</p>
+    <label>Κλειδί Google Gemini (προαιρετικό) <input id="setGemini" type="password" autocomplete="off" placeholder="AIza…"></label>
+    <label>Μοντέλο Gemini <input id="setGeminiModel" type="text" list="geminiModels" placeholder="κενό = αυτόματη επιλογή του καλύτερου διαθέσιμου"></label>
+    <datalist id="geminiModels"></datalist>
+    <button id="btnGeminiTest">🔑 Έλεγχος κλειδιού / λίστα μοντέλων</button> <span id="geminiOut" class="muted"></span>
+    <label>Εναλλακτικά: κλειδί Claude API <input id="setKey" type="password" autocomplete="off" placeholder="sk-ant-…"></label>
+    <p class="muted"><b>Προσοχή ιδιωτικότητας:</b> με κλειδί, η φωτογραφία στέλνεται στον πάροχο μόνο όταν ζητήσετε «τι είναι αυτό» ή «περίγραψε αναλυτικά». Στο δωρεάν επίπεδο του Gemini, η Google μπορεί να χρησιμοποιεί τα δεδομένα για βελτίωση των προϊόντων της — μην τη χρησιμοποιείτε για προσωπικά έγγραφα ή πρόσωπα. Τα κλειδιά μένουν μόνο σε αυτή τη συσκευή.</p>
   </section>
 
   <section>

@@ -45,7 +45,7 @@ export function cropFrame(video, bbox, pad = 0.15, maxSide = 768) {
 
 /** Περιγραφή από Claude (προαιρετικό, με κλειδί του χρήστη). */
 export async function askVision(apiKey, base64, hints = {}) {
-  const prompt = 'Βοηθάς έναν τυφλό χρήστη. Στην εικόνα, το αντικείμενο που κρατά ή δείχνει είναι συνήθως στο κέντρο. ' +
+  const prompt = hints._prompt || 'Βοηθάς έναν τυφλό χρήστη. Στην εικόνα, το αντικείμενο που κρατά ή δείχνει είναι συνήθως στο κέντρο. ' +
     'Πες σε 2 σύντομες προτάσεις στα ελληνικά τι είναι, με μάρκα/όνομα προϊόντος αν διαβάζεται, και ό,τι είναι χρήσιμο ' +
     '(π.χ. γεύση, περιεχόμενο, ημερομηνία λήξης, οδηγίες). Αν δεν είσαι σίγουρος, πες το καθαρά. Χωρίς εισαγωγές.' +
     (hints.label ? ` Ο τοπικός ανιχνευτής πιστεύει ότι είναι: ${hints.label}.` : '') +
@@ -67,4 +67,75 @@ export async function askVision(apiKey, base64, hints = {}) {
   if (!res.ok) throw new Error('vision ' + res.status);
   const j = await res.json();
   return (j.content || []).filter(b => b.type === 'text').map(b => b.text).join(' ').trim();
+}
+
+// ---------------- Gemini (Google AI Studio) ----------------
+const GEMINI = 'https://generativelanguage.googleapis.com/v1beta';
+let geminiModelCache = null;
+
+/** Λίστα μοντέλων που υποστηρίζουν generateContent, με πρώτα τα πιο πρόσφατα «flash». */
+export async function listGeminiModels(key) {
+  const res = await fetch(`${GEMINI}/models?pageSize=200`, { headers: { 'x-goog-api-key': key }, signal: timeout(10000) });
+  if (!res.ok) throw new Error('models ' + res.status);
+  const j = await res.json();
+  const ver = n => parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)/) || [0, 0])[1]);
+  return (j.models || [])
+    .filter(m => /gemini/i.test(m.name) && (m.supportedGenerationMethods || []).includes('generateContent') &&
+      !/embedding|tts|image-generation|live|audio|robotics|computer-use|thinking-exp/i.test(m.name))
+    .map(m => m.name.replace(/^models\//, ''))
+    .sort((a, b) => ver(b) - ver(a) || (/flash/.test(b) - /flash/.test(a)) || (/lite|8b/.test(a) - /lite|8b/.test(b)));
+}
+
+async function geminiCall(key, model, parts, generationConfig) {
+  const res = await fetch(`${GEMINI}/models/${encodeURIComponent(model)}:generateContent`, {
+    method: 'POST', signal: timeout(25000),
+    headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+    body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: { temperature: 0.2, maxOutputTokens: 600, ...generationConfig } })
+  });
+  if (!res.ok) { const e = new Error('gemini ' + res.status); e.status = res.status; throw e; }
+  const j = await res.json();
+  return (j.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join(' ').trim();
+}
+
+/** Δοκιμάζει το προτιμώμενο μοντέλο· αν δεν υπάρχει (404/400), επιλέγει αυτόματα το καλύτερο διαθέσιμο. */
+export async function geminiGenerate(key, preferred, parts, generationConfig) {
+  const tried = [];
+  const attempt = async (m) => { tried.push(m); const t = await geminiCall(key, m, parts, generationConfig); geminiModelCache = m; return t; };
+  const first = preferred || geminiModelCache;
+  if (first) {
+    try { return await attempt(first); } catch (e) { if (![400, 404].includes(e.status)) throw e; }
+  }
+  const models = await listGeminiModels(key);
+  for (const m of models.filter(m => !tried.includes(m)).slice(0, 3)) {
+    try { return await attempt(m); } catch (e) { if (![400, 404].includes(e.status)) throw e; }
+  }
+  throw new Error('no gemini model');
+}
+export const lastGeminiModel = () => geminiModelCache;
+
+const PROMPTS = {
+  identify: (h) => 'Βοηθάς έναν τυφλό χρήστη. Το αντικείμενο που κρατά ή δείχνει είναι συνήθως στο κέντρο της εικόνας. ' +
+    'Απάντησε ΜΟΝΟ με JSON της μορφής {"name":"σύντομο όνομα αντικειμένου στα ελληνικά, 1-3 λέξεις","description":"2 σύντομες προτάσεις στα ελληνικά: τι είναι, μάρκα/όνομα προϊόντος αν διαβάζεται, και ό,τι είναι χρήσιμο όπως γεύση, περιεχόμενο, ημερομηνία λήξης ή οδηγίες"}. ' +
+    'Αν δεν είσαι σίγουρος, πες το στο description.' +
+    (h.label ? ` Ο τοπικός ανιχνευτής πιστεύει ότι είναι: ${h.label}.` : '') + (h.text ? ` Κείμενο ετικέτας: «${h.text}».` : ''),
+  scene: () => 'Βοηθάς έναν τυφλό χρήστη. Περιέγραψε στα ελληνικά τι υπάρχει μπροστά στην κάμερα, από αριστερά προς τα δεξιά και από κοντά προς μακριά. ' +
+    'Ανάφερε τα σημαντικότερα αντικείμενα, ανθρώπους, κείμενα/πινακίδες και οτιδήποτε μπορεί να είναι εμπόδιο ή κίνδυνος. ' +
+    'Μέγιστο 6 σύντομες προτάσεις, χωρίς εισαγωγή και χωρίς μορφοποίηση.'
+};
+
+/** Ενιαία είσοδος: ο πάροχος επιλέγεται από τα κλειδιά που έχει βάλει ο χρήστης. Επιστρέφει {name?, description}. */
+export async function cloudAnalyze(cfg, base64, kind, hints = {}) {
+  const prompt = PROMPTS[kind](hints);
+  let raw;
+  if (cfg.geminiKey) {
+    raw = await geminiGenerate(cfg.geminiKey, cfg.geminiModel, [{ inline_data: { mime_type: 'image/jpeg', data: base64 } }, { text: prompt }],
+      kind === 'identify' ? { responseMimeType: 'application/json' } : undefined);
+  } else if (cfg.cloudKey) {
+    raw = await askVision(cfg.cloudKey, base64, { ...hints, _prompt: prompt });
+  } else throw new Error('no key');
+  if (kind !== 'identify') return { description: raw };
+  try {
+    const j = JSON.parse(raw.replace(/^```(?:json)?|```$/g, '').trim());
+    return { name: String(j.name || '').trim(), description: String(j.description || '').trim() };
+  } catch { return { description: raw }; }
 }

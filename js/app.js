@@ -9,7 +9,7 @@ import { Detector, Embedder, frameLuma } from './vision.js';
 import { Tracker } from './tracker.js';
 import { loadFaces, detectFaces, matchPerson, facesLoaded } from './faces.js';
 import { readText } from './ocr.js';
-import { wikiLookup, cropFrame, askVision } from './lookup.js';
+import { wikiLookup, cropFrame, cloudAnalyze, listGeminiModels, lastGeminiModel } from './lookup.js';
 import { parseCommand, norm, resolveTarget } from './commands.js';
 import { classInfo, classCandidates, pluralize, HAZARD_CLASSES, WALK_CATS, S } from './lang-el.js';
 import * as G from './spatial.js';
@@ -557,6 +557,7 @@ async function waitSilence() {
 }
 
 async function confirm(question) {
+  if (st.testConfirm !== undefined) return st.testConfirm; // hook για αυτοματοποιημένες δοκιμές
   const a = await askText(question + ' Πείτε ναι ή όχι.', 6000);
   return /^(ναι|σωστα|εντασει|οκ|ok|φυσικα|βεβαιως)/.test(norm(a));
 }
@@ -687,11 +688,13 @@ async function identify(hint) {
     const parts = [];
     if (label) parts.push(`Είναι ${label}.`);
     if (text.length >= 3) parts.push(`Στην ετικέτα γράφει: ${text}.`);
-    // 2) Πλούσια περιγραφή από εικόνα (μόνο με δικό του κλειδί του χρήστη)
-    let described = false;
-    if (online && settings.cloudKey) {
-      try { const d = await askVision(settings.cloudKey, base64, { label, text }); if (d) { parts.length = 0; parts.push(d); described = true; } }
-      catch (e) { console.warn('vision', e); parts.push('Η περιγραφή από το διαδίκτυο απέτυχε.'); }
+    // 2) Πλούσια περιγραφή από εικόνα (cloud μοντέλο· μόνο με δικό του κλειδί του χρήστη)
+    let described = false, cloudName = '';
+    if (online && hasCloud()) {
+      try {
+        const r = await cloudAnalyze(settings, base64, 'identify', { label, text });
+        if (r.description) { parts.length = 0; parts.push(r.name ? `${r.name}. ${r.description}` : r.description); described = true; cloudName = r.name || ''; }
+      } catch (e) { console.warn('cloud', e); parts.push(e.status === 429 ? 'Το όριο χρήσης του cloud μοντέλου εξαντλήθηκε προς το παρόν.' : 'Η περιγραφή από το διαδίκτυο απέτυχε.'); }
     }
     // 3) Αναζήτηση στη Wikipedia με λέξεις (είδος + κείμενο ετικέτας)
     if (!described && online && settings.webLookup && (label || text)) {
@@ -709,8 +712,44 @@ async function identify(hint) {
     const out = parts.join(' ');
     $('said').textContent = out; addLog('🔎', out);
     for (const c of out.match(/[^.]{1,200}(\.|$)/g) || [out]) voice.speak(c.trim(), { priority: 2 });
+    // Μάθηση: το cloud μοντέλο δεν «θυμάται», η εφαρμογή όμως ναι — αποθηκεύουμε το αντικείμενο τοπικά
+    if (described && cloudName && embedder.ready) {
+      await waitSilence();
+      if (await confirm(`Θέλετε να το θυμάμαι ως ${cloudName}, για να το αναγνωρίζω μόνη μου την επόμενη φορά;`)) {
+        const samples = embedder.embedImage(canvas);
+        const ex = memory.items.find(i => norm(i.name) === norm(cloudName));
+        const item = ex || { id: uid(), name: cloudName, embeddings: [], created: Date.now() };
+        item.embeddings = item.embeddings.concat(samples).slice(-60);
+        await memory.saveItem(item);
+        chime.found();
+        say(`Το έμαθα ως ${cloudName}. Για καλύτερη αναγνώριση, πείτε μάθε αυτό ως ${cloudName} δείχνοντάς το από άλλες πλευρές.`, { priority: 2 });
+      }
+    }
   } catch (e) { console.error(e); say('Δεν μπόρεσα να αναγνωρίσω το αντικείμενο.', { priority: 2 }); }
   finally { st.busy = false; }
+}
+
+const hasCloud = () => !!(settings.geminiKey || settings.cloudKey);
+
+/** «Περίγραψε αναλυτικά»: πλήρης περιγραφή της σκηνής από cloud μοντέλο όρασης (πολύ περισσότερα αντικείμενα από τις 80 κατηγορίες). */
+async function describeDeep() {
+  if (st.busy) return;
+  if (!hasCloud()) return say('Για αναλυτική περιγραφή χρειάζεται κλειδί Gemini ή Claude στις ρυθμίσεις. Προς το παρόν σας λέω τι αναγνωρίζω τοπικά.', { priority: 2 }), describeScene();
+  if (!navigator.onLine) return say('Δεν υπάρχει σύνδεση στο διαδίκτυο. Σας λέω τι αναγνωρίζω τοπικά.', { priority: 2 }), describeScene();
+  stopActivities(true);
+  st.busy = true;
+  try {
+    say('Αναλύω την εικόνα. Μια στιγμή.', { priority: 2 });
+    const { base64 } = cropFrame(video, null, 0, 1024);
+    const r = await cloudAnalyze(settings, base64, 'scene');
+    chime.done();
+    $('said').textContent = r.description; addLog('🧠', r.description);
+    for (const c of r.description.match(/[^.]{1,220}(\.|$)/g) || [r.description]) voice.speak(c.trim(), { priority: 2 });
+  } catch (e) {
+    console.warn(e); chime.error();
+    say(e.status === 429 ? 'Το όριο χρήσης του cloud μοντέλου εξαντλήθηκε. Δοκιμάστε σε λίγο.' : 'Η αναλυτική περιγραφή απέτυχε. Σας λέω τι αναγνωρίζω τοπικά.', { priority: 2 });
+    describeScene();
+  } finally { st.busy = false; }
 }
 
 // ---------------- Περιγραφή σκηνής ----------------
@@ -745,6 +784,7 @@ async function execute(cmd) {
     case 'PAUSE': st.paused = true; stopActivities(true); updateChips(); return say(S.paused, { priority: 2 });
     case 'RESUME': st.paused = false; updateChips(); return say(S.resumed, { priority: 2 });
     case 'DESCRIBE': return describeScene();
+    case 'DESCRIBE_DEEP': return describeDeep();
     case 'SCAN': return startScan();
     case 'READ_TEXT': return doRead();
     case 'FIND': return startSearch(t);
@@ -908,7 +948,7 @@ function syncUI() {
   $('setVolume').value = settings.volume * 10; $('setRate').value = settings.rate * 10;
   $('setVoice').checked = settings.voice; $('setBeeps').checked = settings.beeps; $('setHaptics').checked = settings.haptics;
   $('setTorch').checked = settings.autoTorch; $('setHands').checked = settings.handsFree; $('setVideo').checked = settings.showVideo;
-  $('setFaces').checked = settings.faces; $('setWeb').checked = settings.webLookup; $('setKey').value = settings.cloudKey; $('setVerbosity').value = settings.verbosity; $('setMode').value = settings.mode;
+  $('setFaces').checked = settings.faces; $('setWeb').checked = settings.webLookup; $('setKey').value = settings.cloudKey; $('setGemini').value = settings.geminiKey; $('setGeminiModel').value = settings.geminiModel; $('setVerbosity').value = settings.verbosity; $('setMode').value = settings.mode;
   $('setDelay').value = settings.voiceDelay; $('setScore').value = Math.round(settings.minScore * 100); $('setModel').value = settings.model;
   $('setFov').value = settings.fovLong;
   $('delayOut').textContent = settings.voiceDelay + ' δ'; $('scoreOut').textContent = Math.round(settings.minScore * 100) + '%';
@@ -951,6 +991,7 @@ function bindUI() {
   $('qStop').onclick = () => execute({ intent: 'STOP' });
   $('qPause').onclick = () => execute({ intent: st.paused ? 'RESUME' : 'PAUSE' });
   $('qBlack').onclick = () => setBlackout(true);
+  $('qDeep').onclick = () => execute({ intent: 'DESCRIBE_DEEP' });
   $('qIdentify').onclick = () => execute({ intent: 'IDENTIFY', target: null });
   $('qHelp').onclick = () => execute({ intent: 'HELP' });
   $('btnSettings').onclick = () => { renderMemory(); $('panel').showModal(); };
@@ -975,7 +1016,15 @@ function bindUI() {
   });
   bind('setVolume', 'volume', v => v / 10); bind('setRate', 'rate', v => v / 10);
   bind('setVoice', 'voice'); bind('setBeeps', 'beeps'); bind('setHaptics', 'haptics'); bind('setTorch', 'autoTorch'); bind('setVideo', 'showVideo');
-  bind('setFaces', 'faces'); bind('setWeb', 'webLookup'); bind('setKey', 'cloudKey', v => v.trim()); bind('setVerbosity', 'verbosity', Number, 'change'); bind('setMode', 'mode', v => v, 'change');
+  bind('setFaces', 'faces'); bind('setWeb', 'webLookup'); bind('setKey', 'cloudKey', v => v.trim()); bind('setGemini', 'geminiKey', v => v.trim()); bind('setGeminiModel', 'geminiModel', v => v.trim());
+  $('btnGeminiTest').onclick = async () => {
+    const out = $('geminiOut'); out.textContent = 'Έλεγχος…';
+    try {
+      const list = await listGeminiModels(settings.geminiKey);
+      $('geminiModels').innerHTML = list.map(m => `<option value="${escapeHtml(m)}">`).join('');
+      out.textContent = `Το κλειδί δουλεύει. ${list.length} μοντέλα διαθέσιμα. Πρώτα: ${list.slice(0, 4).join(', ')}`;
+    } catch (e) { out.textContent = 'Αποτυχία: ' + e.message + ' (έλεγξε το κλειδί και τη σύνδεση)'; }
+  }; bind('setVerbosity', 'verbosity', Number, 'change'); bind('setMode', 'mode', v => v, 'change');
   bind('setDelay', 'voiceDelay', Number); bind('setScore', 'minScore', v => v / 100); bind('setFov', 'fovLong', Number);
   $('setHands').addEventListener('change', e => {
     settings.handsFree = e.target.checked;
@@ -1024,7 +1073,7 @@ function registerSW() {
 }
 
 // Για αυτοματοποιημένες δοκιμές
-window.__sv = { identify, st, search, scan, nav, memory, detector, embedder, sensors, voice, parseCommand, execute, handleUtterance, learnObject, startSearch, startScan, describeScene };
+window.__sv = { identify, describeDeep, lastGeminiModel, st, search, scan, nav, memory, detector, embedder, sensors, voice, parseCommand, execute, handleUtterance, learnObject, startSearch, startScan, describeScene };
 
 bindUI();
 if (!recognitionSupported) $('introWarn').textContent = 'Ο browser δεν υποστηρίζει φωνητικές εντολές — θα χρησιμοποιήσετε τα κουμπιά. Προτείνεται Chrome σε Android.';

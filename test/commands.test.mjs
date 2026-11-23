@@ -60,3 +60,9 @@ test('τι είναι αυτό', () => {
   assert.equal(P('ψάξε στο ίντερνετ τι είναι αυτό').intent, 'IDENTIFY');
 });
 test('τι είναι μπροστά παραμένει περιγραφή', () => assert.equal(P('τι είναι μπροστά').intent, 'DESCRIBE'));
+test('αναλυτική περιγραφή (cloud)', () => {
+  assert.equal(P('περιέγραψε αναλυτικά').intent, 'DESCRIBE_DEEP');
+  assert.equal(P('τι βλέπεις αναλυτικά').intent, 'DESCRIBE_DEEP');
+  assert.equal(P('αναλυτική περιγραφή').intent, 'DESCRIBE_DEEP');
+  assert.equal(P('τι βλέπεις').intent, 'DESCRIBE');
+});

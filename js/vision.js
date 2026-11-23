@@ -96,6 +96,17 @@ export class Embedder {
     return res.embeddings[0].floatEmbedding;
   }
 
+  /** Embeddings από ένα έτοιμο canvas (π.χ. αποκομμένο αντικείμενο) — για εκμάθηση από «τι είναι αυτό». */
+  embedImage(canvas) {
+    if (!this.#emb) return [];
+    const out = [];
+    for (const s of [1, 0.8, 0.6]) {
+      const h = s / 2;
+      out.push(Float32Array.from(this.#emb.embed(canvas, { regionOfInterest: { left: 0.5 - h, top: 0.5 - h, right: 0.5 + h, bottom: 0.5 + h } }).embeddings[0].floatEmbedding));
+    }
+    return out;
+  }
+
   /** Embedding του κέντρου της εικόνας σε διάφορες κλίμακες — για εκμάθηση. */
   embedCenterSamples() {
     const out = [];

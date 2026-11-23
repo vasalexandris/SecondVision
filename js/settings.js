@@ -19,6 +19,8 @@ export const defaults = {
   facing: 'environment',  // κάμερα: environment | user
   deviceId: '',           // συγκεκριμένη κάμερα (π.χ. εξωτερική)
   webLookup: true,        // «τι είναι αυτό»: αναζήτηση στη Wikipedia (στέλνει μόνο λέξεις)
+  geminiKey: '',          // προαιρετικό κλειδί Google Gemini (opt-in)
+  geminiModel: '',        // κενό = αυτόματη επιλογή του καλύτερου διαθέσιμου μοντέλου
   cloudKey: '',           // προαιρετικό κλειδί Claude API για περιγραφή από εικόνα (opt-in)
   faces: true,            // αναγνώριση προσώπων που έχουν αποθηκευτεί
   classMute: {},          // { cls|id: true }
