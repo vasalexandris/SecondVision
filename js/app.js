@@ -557,7 +557,7 @@ async function waitSilence() {
 }
 
 async function confirm(question) {
-  if (st.testConfirm !== undefined) return st.testConfirm; // hook για αυτοματοποιημένες δοκιμές
+  if (st.testConfirm !== undefined) { say(question, { priority: 2 }); return st.testConfirm; } // hook για αυτοματοποιημένες δοκιμές
   const a = await askText(question + ' Πείτε ναι ή όχι.', 6000);
   return /^(ναι|σωστα|εντασει|οκ|ok|φυσικα|βεβαιως)/.test(norm(a));
 }
