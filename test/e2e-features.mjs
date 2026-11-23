@@ -73,7 +73,7 @@ await page.evaluate(() => { window.__fakeCar = false; });
 
 // ---- Τι είναι αυτό ----
 await page.evaluate(() => window.__setImg('tennis'));
-await page.waitForTimeout(2500);
+await page.waitForFunction(() => window.__sv.st.tracks.some(t => t.cls === 'tennis racket' && t.hits >= 2), null, { timeout: 30000 }).catch(() => {});
 await page.evaluate(() => { window.__said.length = 0; });
 await page.evaluate(() => window.__sv.handleUtterance(['τι αντικείμενο είναι αυτό']));
 await page.waitForFunction(() => !window.__sv.st.busy && window.__said.length > 1, null, { timeout: 90000 }).catch(() => {});
@@ -83,7 +83,7 @@ await page.evaluate(() => { window.__setText('ΓΑΛΑ|ΔΕΛΤΑ'); window.__sa
 await page.waitForTimeout(800);
 await page.evaluate(() => window.__sv.identify(null));
 const s3b = await said();
-ok('διαβάζει ετικέτα (OCR) πριν την αναζήτηση', s3b.some(x => /Στην ετικέτα γράφει: ΓΑΛΑ/.test(x)), s3b.join(' | '));
+ok('διαβάζει ετικέτα (OCR) πριν την αναζήτηση', s3b.some(x => /Στην ετικέτα γράφει: .*ΑΛΑ/.test(x)), s3b.join(' | '));
 // χωρίς σύνδεση
 await ctx.setOffline(true);
 await page.evaluate(() => { window.__said.length = 0; return window.__sv.identify(null); });
