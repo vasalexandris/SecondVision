@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#05060a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Δεύτερη Όραση">
+<meta name="description" content="Δεύτερη Όραση: αναγνώριση αντικειμένων, προσώπων και κειμένου σε πραγματικό χρόνο με φωνητικό έλεγχο, για τυφλούς και άτομα με μειωμένη όραση. Λειτουργεί χωρίς internet.">
+<title>Δεύτερη Όραση</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<!-- Αρχική οθόνη: χρειάζεται ένα πάτημα ώστε ο browser να επιτρέψει ήχο, κάμερα και αισθητήρες -->
+<main id="intro" class="intro">
+  <div class="logo" aria-hidden="true">👁️</div>
+  <h1>Δεύτερη Όραση</h1>
+  <p class="lead">Σας λέει τι υπάρχει γύρω σας, βρίσκει τα πράγματά σας και σας καθοδηγεί — όλα με τη φωνή σας.</p>
+  <button id="btnStart" class="giant primary" aria-label="Έναρξη εφαρμογής. Πατήστε το μεγάλο κουμπί.">ΕΝΑΡΞΗ</button>
+  <p id="introErr" class="err" role="alert"></p>
+  <p id="introWarn" class="muted"></p>
+  <ul class="tips">
+    <li>🧣 Κρεμάστε το κινητό στο λαιμό με την κάμερα προς τα έξω, ή τοποθετήστε το σε καπέλο.</li>
+    <li>🎤 Πατήστε το κάτω μέρος της οθόνης και πείτε: «βρες τα κλειδιά», «τι βλέπεις», «σάρωση».</li>
+    <li>🔒 Όλα μένουν στη συσκευή σας. Δεν στέλνονται εικόνες πουθενά.</li>
+  </ul>
+</main>
+
+<div id="app" class="app" hidden>
+  <header class="topbar">
+    <span class="chip" id="chipMode">🏠 Εξερεύνηση</span>
+    <span class="chip act" id="chipAct" hidden></span>
+    <span class="chip" id="chipTorch" hidden></span>
+    <span class="chip" id="chipCompass">🧭 —</span>
+    <span class="chip dim" id="fps">-- fps</span>
+    <button id="btnSettings" class="icon" aria-label="Ρυθμίσεις και μνήμη">⚙️</button>
+  </header>
+
+  <section id="stage" class="stage" aria-label="Εικόνα κάμερας">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="overlay"></canvas>
+  </section>
+
+  <div class="info" aria-live="polite">
+    <div id="status" class="status" data-kind="loading">Φόρτωση…</div>
+    <div id="heard" class="heard"></div>
+    <div id="said" class="said"></div>
+  </div>
+
+  <button id="btnTalk" class="talk" aria-label="Μίλα. Πατήστε και πείτε εντολή." aria-pressed="false">
+    <span class="mic" aria-hidden="true">🎤</span>
+    <span class="talk-label">ΜΙΛΑ</span>
+    <span class="talk-hint">Πατήστε και πείτε εντολή</span>
+  </button>
+
+  <nav class="quick" aria-label="Γρήγορες ενέργειες">
+    <button id="qDescribe">👁️<span>Τι βλέπεις</span></button>
+    <button id="qScan">🔄<span>Σάρωση 360°</span></button>
+    <button id="qRead">📖<span>Διάβασε</span></button>
+    <button id="qTorch">🔦<span>Φακός</span></button>
+    <button id="qPause">⏯<span>Παύση</span></button>
+    <button id="qStop" class="danger">⏹<span>Στοπ</span></button>
+    <button id="qBlack">🌑<span>Μαύρη οθόνη</span></button>
+    <button id="qHelp">❓<span>Βοήθεια</span></button>
+  </nav>
+
+  <ul id="log" class="log" aria-label="Ιστορικό"></ul>
+</div>
+
+<div id="blackout" class="blackout" hidden role="button" aria-label="Μαύρη οθόνη. Ένα πάτημα για ομιλία, δύο για επαναφορά."></div>
+
+<dialog id="panel" class="panel" aria-label="Ρυθμίσεις">
+  <header><h2>Ρυθμίσεις & μνήμη</h2><button id="btnClosePanel" class="icon" aria-label="Κλείσιμο">✕</button></header>
+
+  <section>
+    <h3>Φωνή</h3>
+    <label>Ένταση <output id="volOut"></output><input id="setVolume" type="range" min="1" max="10" step="1"></label>
+    <label>Ταχύτητα <output id="rateOut"></output><input id="setRate" type="range" min="6" max="18" step="1"></label>
+    <label class="row"><input id="setVoice" type="checkbox"> Φωνητική ανακοίνωση αντικειμένων</label>
+    <label>Πληροφορίες
+      <select id="setVerbosity"><option value="0">Ελάχιστες (μόνο σημαντικά)</option><option value="1">Κανονικές</option><option value="2">Αναλυτικές (με αποστάσεις)</option></select>
+    </label>
+    <label>Λειτουργία
+      <select id="setMode"><option value="explore">Εξερεύνηση (δωμάτιο)</option><option value="walk">Περπάτημα (εμπόδια, άνθρωποι, οχήματα)</option></select>
+    </label>
+    <label>Καθυστέρηση επανάληψης <output id="delayOut"></output><input id="setDelay" type="range" min="2" max="30" step="1"></label>
+    <label class="row"><input id="setHands" type="checkbox"> Συνεχής ακρόαση (πείτε «όραση» πριν την εντολή)</label>
+    <label class="row"><input id="setBeeps" type="checkbox"> Ηχητικά σήματα καθοδήγησης</label>
+    <label class="row"><input id="setHaptics" type="checkbox"> Δονήσεις</label>
+  </section>
+
+  <section>
+    <h3>Κάμερα & όραση</h3>
+    <label class="row"><input id="setTorch" type="checkbox"> Αυτόματο φλας σε χαμηλό φωτισμό</label>
+    <label class="row"><input id="setVideo" type="checkbox"> Εμφάνιση εικόνας (για βοηθό με όραση)</label>
+    <label class="row"><input id="setFaces" type="checkbox"> Αναγνώριση αποθηκευμένων προσώπων</label>
+    <label>Μοντέλο
+      <select id="setModel"><option value="lite0">Γρήγορο (EfficientDet-Lite0)</option><option value="lite2">Ακριβές (EfficientDet-Lite2)</option></select>
+    </label>
+    <label>Ελάχιστη βεβαιότητα <output id="scoreOut"></output><input id="setScore" type="range" min="25" max="90" step="5"></label>
+    <label>Κάμερα
+      <select id="setFacing"><option value="environment">Πίσω (προς τα έξω)</option><option value="user">Μπροστινή (selfie)</option></select>
+    </label>
+    <label>Συγκεκριμένη κάμερα <select id="setCamera"></select></label>
+    <label>Γωνία όρασης κάμερας (FOV) <output id="fovOut"></output><input id="setFov" type="range" min="45" max="100" step="1"></label>
+    <p class="muted">Η γωνία όρασης επηρεάζει την ακρίβεια κατεύθυνσης και απόστασης. Οι περισσότερες κάμερες κινητών είναι 60–75°.</p>
+  </section>
+
+  <section>
+    <h3>Μάθε κάτι νέο (για βοηθό)</h3>
+    <label>Όνομα <input id="learnName" type="text" placeholder="π.χ. κλειδιά, Μαρία, σπίτι"></label>
+    <div class="btnrow">
+      <button id="btnLearnObj">📦 Αντικείμενο</button>
+      <button id="btnLearnPerson">🧑 Πρόσωπο</button>
+      <button id="btnSavePlace">📍 Τοποθεσία</button>
+    </div>
+    <label>Ψάξε (χωρίς φωνή) <input id="typeFind" type="text" placeholder="π.χ. κλειδιά"></label>
+    <button id="btnTypeFind">🔎 Ψάξε</button>
+  </section>
+
+  <section>
+    <h3>Αποθηκευμένα</h3>
+    <ul id="memList" class="memlist"></ul>
+    <p class="muted">Σε σίγαση: <span id="mutedList">—</span> <button id="btnUnmuteAll" class="linklike">Επαναφορά όλων</button></p>
+  </section>
+
+  <section>
+    <h3>Χωρίς internet</h3>
+    <p class="muted">Η εφαρμογή αποθηκεύει αυτόματα τα βασικά μοντέλα. Πατήστε για να αποθηκευτούν και τα υπόλοιπα (ακριβές μοντέλο, πρόσωπα, ανάγνωση κειμένου).</p>
+    <button id="btnWarm">⬇️ Προφόρτωση όλων</button> <span id="offlineOut" class="muted"></span>
+    <button id="btnResetSettings" class="linklike">Επαναφορά ρυθμίσεων</button>
+  </section>
+</dialog>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
