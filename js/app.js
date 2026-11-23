@@ -1002,6 +1002,8 @@ async function warmOfflineCache() {
 }
 
 function bindUI() {
+  $('introKey').value = settings.geminiKey;
+  $('introKey').addEventListener('input', e => { settings.geminiKey = e.target.value.trim(); });
   $('btnStart').onclick = start;
   $('btnTalk').onclick = talk;
   $('qDescribe').onclick = () => execute({ intent: 'DESCRIBE' });
