@@ -48,3 +48,15 @@ test('διάβασε', () => assert.equal(P('διάβασε').intent, 'READ_TEXT
 test('βοήθεια', () => assert.equal(P('βοήθεια').intent, 'HELP'));
 test('άγνωστο', () => assert.equal(P('μπλα μπλα μπλα').intent, 'UNKNOWN'));
 test('resolve με λάθος ASR', () => assert.equal(resolveTarget('κλιδια', ctx.candidates).id, 'c1'));
+test('μέσα σε αυτοκίνητο', () => {
+  assert.deepEqual(P('είμαι σε αυτοκίνητο'), { intent: 'MODE', value: 'car' });
+  assert.deepEqual(P('τώρα είμαι μέσα σε ένα αυτοκίνητο'), { intent: 'MODE', value: 'car' });
+  assert.equal(P('βγήκα από το αυτοκίνητο').value, 'explore');
+});
+test('τι είναι αυτό', () => {
+  assert.equal(P('τι είναι αυτό').intent, 'IDENTIFY');
+  const r = P('τι μπουκάλι είναι αυτό'); assert.equal(r.intent, 'IDENTIFY'); assert.equal(r.target.id, 'bottle');
+  assert.equal(P('τι αντικείμενο είναι αυτό').intent, 'IDENTIFY');
+  assert.equal(P('ψάξε στο ίντερνετ τι είναι αυτό').intent, 'IDENTIFY');
+});
+test('τι είναι μπροστά παραμένει περιγραφή', () => assert.equal(P('τι είναι μπροστά').intent, 'DESCRIBE'));

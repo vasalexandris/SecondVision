@@ -9,6 +9,7 @@ import { Detector, Embedder, frameLuma } from './vision.js';
 import { Tracker } from './tracker.js';
 import { loadFaces, detectFaces, matchPerson, facesLoaded } from './faces.js';
 import { readText } from './ocr.js';
+import { wikiLookup, cropFrame, askVision } from './lookup.js';
 import { parseCommand, norm, resolveTarget } from './commands.js';
 import { classInfo, classCandidates, pluralize, HAZARD_CLASSES, WALK_CATS, S } from './lang-el.js';
 import * as G from './spatial.js';
@@ -26,7 +27,7 @@ const st = {
   luma: 0.5, lowLightSince: 0, brightSince: 0, torchManual: false, lastLowLightWarn: 0,
   fps: 0, frames: 0, lastFpsT: performance.now(), lastVideoTime: -1, lastLumaT: 0,
   lastAmbient: 0, lastCustomScan: 0, lastFaceT: 0, faceBusy: false, lastHazard: new Map(),
-  lastSpoken: new Map(), tracks: [], hfov: 50, wake: null
+  lastSpoken: new Map(), tracks: [], hfov: 50, wake: null, vehWarns: [], carAsked: 0, prevMode: 'explore'
 };
 const search = { active: false, target: null, t0: 0, bins: null, fix: null, foundSaid: false, lastSay: 0, reachedSaid: false, lostSaid: false };
 const scan = { active: false, t0: 0, bins: null, seen: new Map(), halfSaid: false, auto: false };
@@ -62,7 +63,7 @@ const catOf = tr => tr.cls.startsWith('custom:') ? 'custom' : classInfo(tr.cls).
 
 function setStatus(text, kind = '') { const el = $('status'); el.textContent = text; el.dataset.kind = kind; }
 function updateChips() {
-  $('chipMode').textContent = settings.mode === 'walk' ? '🚶 Περπάτημα' : '🏠 Εξερεύνηση';
+  $('chipMode').textContent = { walk: '🚶 Περπάτημα', car: '🚗 Σε όχημα' }[settings.mode] || '🏠 Εξερεύνηση';
   const act = search.active ? `🔎 ${search.target.label}` : scan.active ? '🔄 Σάρωση 360°' : nav.active ? `🧭 ${nav.place.name}` : st.paused ? '⏸ Παύση' : '';
   $('chipAct').textContent = act; $('chipAct').hidden = !act;
   $('chipTorch').textContent = cam.torchOn ? '🔦 Φακός' : ''; $('chipTorch').hidden = !cam.torchOn;
@@ -216,6 +217,7 @@ function updateHazards(tracks) {
   const now = Date.now();
   for (const tr of tracks) {
     if (tr.dist == null) continue;
+    if (settings.mode === 'car' && HAZARD_CLASSES.has(tr.cls)) continue; // επιβάτης: τα οχήματα γύρω είναι φυσιολογικά
     const speed = Tracker.approachSpeed(tr);
     const inPath = Math.abs(tr.angle) < st.hfov * 0.45;
     let msg = null, urgent = false;
@@ -233,8 +235,28 @@ function updateHazards(tracks) {
     voice.speak(msg, { priority: urgent ? 3 : 2, key: 'hazard' });
     $('said').textContent = msg; addLog('⚠️', msg);
     if (urgent) { chime.danger(); if (settings.haptics) vibrate([200, 80, 200]); }
+    if (urgent && HAZARD_CLASSES.has(tr.cls)) suggestCarMode(now);
   }
   if (st.lastHazard.size > 200) st.lastHazard.clear();
+}
+
+/** Αν οι προειδοποιήσεις οχημάτων επαναλαμβάνονται συνεχώς, ρωτά αν ο χρήστης είναι μέσα σε όχημα. */
+function suggestCarMode(now) {
+  st.vehWarns = st.vehWarns.filter(t => now - t < 40000); st.vehWarns.push(now);
+  const speed = sensors.position?.speed;
+  const fast = typeof sensors.position?.speed === 'number' && speed > 5; // >18 km/h
+  if (settings.mode === 'car' || st.busy || now - st.carAsked < 600000) return;
+  if (st.vehWarns.length < (fast ? 2 : 5)) return;
+  st.carAsked = now; st.vehWarns = [];
+  (async () => {
+    st.busy = true;
+    try {
+      if (await confirm('Προειδοποιώ συνεχώς για οχήματα. Είστε μέσα σε αυτοκίνητο;')) {
+        st.prevMode = settings.mode; settings.mode = 'car'; syncUI(); updateChips();
+        say('Εντάξει. Λειτουργία οχήματος: δεν θα προειδοποιώ για αυτοκίνητα. Πείτε βγήκα από το αυτοκίνητο όταν κατεβείτε.', { priority: 2 });
+      }
+    } finally { st.busy = false; }
+  })();
 }
 
 // ---------------- Ανακοινώσεις περιβάλλοντος ----------------
@@ -247,6 +269,7 @@ function announceAmbient(tracks, now) {
   for (const tr of tracks) {
     if (tr.hits < 3 || mutedOf(tr) || tr.cls.startsWith('custom:') === false && tr.score < Math.max(settings.minScore, 0.5)) continue;
     const cat = catOf(tr);
+    if (settings.mode === 'car' && cat === 'vehicle') continue;
     if (settings.mode === 'walk' && !WALK_CATS.has(cat) && cat !== 'custom') continue;
     if (settings.verbosity === 0 && !(cat === 'custom' || cat === 'person' || cat === 'vehicle' || cat === 'animal' || (cat === 'obstacle' && tr.dist != null && tr.dist < 2))) continue;
     const key = keyOf(tr) + (tr.name ? ':n' : '');
@@ -635,6 +658,57 @@ async function doRead() {
   } finally { st.busy = false; }
 }
 
+// ---------------- «Τι είναι αυτό;» ----------------
+function pickSubject(hint) {
+  const W = video.videoWidth, H = video.videoHeight;
+  let list = st.tracks.filter(t => t.hits >= 2);
+  if (hint) { const m = list.filter(t => matchesTarget(t, hint)); if (m.length) list = m; }
+  if (!list.length) return null;
+  // Προτιμάμε ό,τι είναι πιο κεντρικό και μεγάλο (το αντικείμενο που κρατά/δείχνει ο χρήστης)
+  const score = t => { const cx = (t.bbox.x + t.bbox.w / 2) / W - 0.5, cy = (t.bbox.y + t.bbox.h / 2) / H - 0.5;
+    return -Math.hypot(cx, cy) * 2 + Math.sqrt(t.bbox.w * t.bbox.h / (W * H)) + (t.cls === 'person' ? -0.5 : 0); };
+  return list.reduce((a, b) => (score(b) > score(a) ? b : a));
+}
+
+async function identify(hint) {
+  if (st.busy) return;
+  stopActivities(true);
+  st.busy = true;
+  try {
+    const tr = pickSubject(hint);
+    const label = tr ? labelOf(tr) : null;
+    const { canvas, base64 } = cropFrame(video, tr ? tr.bbox : { x: video.videoWidth * 0.2, y: video.videoHeight * 0.2, w: video.videoWidth * 0.6, h: video.videoHeight * 0.6 }, 0.15);
+    say(label ? `Βλέπω ${label}. Κοιτάζω πιο προσεκτικά.` : 'Κοιτάζω το κέντρο της εικόνας.', { priority: 2 });
+    if (st.luma < 0.2 && cam.torchSupported && !cam.torchOn) await cam.setTorch(true);
+    // 1) Κείμενο στην ετικέτα (τοπικά, χωρίς internet)
+    let text = '';
+    try { text = (await readText(canvas)).text.slice(0, 120); } catch (e) { console.warn('ocr', e); }
+    const online = navigator.onLine;
+    const parts = [];
+    if (label) parts.push(`Είναι ${label}.`);
+    if (text.length >= 3) parts.push(`Στην ετικέτα γράφει: ${text}.`);
+    // 2) Πλούσια περιγραφή από εικόνα (μόνο με δικό του κλειδί του χρήστη)
+    let described = false;
+    if (online && settings.cloudKey) {
+      try { const d = await askVision(settings.cloudKey, base64, { label, text }); if (d) { parts.length = 0; parts.push(d); described = true; } }
+      catch (e) { console.warn('vision', e); parts.push('Η περιγραφή από το διαδίκτυο απέτυχε.'); }
+    }
+    // 3) Αναζήτηση στη Wikipedia με λέξεις (είδος + κείμενο ετικέτας)
+    if (!described && online && settings.webLookup && (label || text)) {
+      const q = [text.split(/\s+/).slice(0, 6).join(' '), label].filter(Boolean).join(' ');
+      const w = await wikiLookup(q);
+      if (w) parts.push(`Από το διαδίκτυο, ${w.title}: ${w.extract}`);
+      else parts.push('Δεν βρήκα περισσότερες πληροφορίες στο διαδίκτυο.');
+    } else if (!described && !online) parts.push('Δεν υπάρχει σύνδεση στο διαδίκτυο για αναζήτηση.');
+    if (!parts.length) { chime.error(); parts.push('Δεν κατάλαβα τι είναι. Κρατήστε το πιο κοντά, στο κέντρο, με καλό φως.'); }
+    else chime.done();
+    const out = parts.join(' ');
+    $('said').textContent = out; addLog('🔎', out);
+    for (const c of out.match(/[^.]{1,200}(\.|$)/g) || [out]) voice.speak(c.trim(), { priority: 2 });
+  } catch (e) { console.error(e); say('Δεν μπόρεσα να αναγνωρίσω το αντικείμενο.', { priority: 2 }); }
+  finally { st.busy = false; }
+}
+
 // ---------------- Περιγραφή σκηνής ----------------
 function describeScene() {
   const tracks = st.tracks.filter(t => t.hits >= 2 && !mutedOf(t));
@@ -726,7 +800,14 @@ async function execute(cmd) {
     case 'VERBOSITY':
       settings.verbosity = Math.min(2, Math.max(0, settings.verbosity + (cmd.dir === 'more' ? 1 : -1))); syncUI();
       return say(['Ελάχιστες πληροφορίες.', 'Κανονικές πληροφορίες.', 'Αναλυτικές πληροφορίες.'][settings.verbosity], { priority: 2 });
-    case 'MODE': settings.mode = cmd.value; syncUI(); updateChips(); return say(cmd.value === 'walk' ? 'Λειτουργία περπατήματος: θα σας λέω μόνο για εμπόδια, ανθρώπους και οχήματα.' : 'Λειτουργία εξερεύνησης.', { priority: 2 });
+    case 'MODE':
+      if (cmd.value === 'car' && settings.mode !== 'car') st.prevMode = settings.mode;
+      settings.mode = cmd.value === 'explore' && cmd.leaveVehicle && st.prevMode !== 'car' ? st.prevMode : cmd.value;
+      syncUI(); updateChips();
+      return say({ walk: 'Λειτουργία περπατήματος: θα σας λέω μόνο για εμπόδια, ανθρώπους και οχήματα.',
+        car: 'Λειτουργία οχήματος: δεν θα προειδοποιώ για αυτοκίνητα γύρω σας. Θα συνεχίσω για τα υπόλοιπα.',
+        explore: cmd.leaveVehicle ? 'Καλώς ήρθατε έξω. Οι προειδοποιήσεις οχημάτων είναι πάλι ενεργές.' : 'Λειτουργία εξερεύνησης.' }[settings.mode] || 'Εντάξει.', { priority: 2 });
+    case 'IDENTIFY': return identify(cmd.target);
     case 'TORCH': {
       st.torchManual = true;
       if (!cam.torchSupported) return say('Ο φακός δεν υποστηρίζεται σε αυτή τη συσκευή ή κάμερα.', { priority: 2 });
@@ -823,7 +904,7 @@ function syncUI() {
   $('setVolume').value = settings.volume * 10; $('setRate').value = settings.rate * 10;
   $('setVoice').checked = settings.voice; $('setBeeps').checked = settings.beeps; $('setHaptics').checked = settings.haptics;
   $('setTorch').checked = settings.autoTorch; $('setHands').checked = settings.handsFree; $('setVideo').checked = settings.showVideo;
-  $('setFaces').checked = settings.faces; $('setVerbosity').value = settings.verbosity; $('setMode').value = settings.mode;
+  $('setFaces').checked = settings.faces; $('setWeb').checked = settings.webLookup; $('setKey').value = settings.cloudKey; $('setVerbosity').value = settings.verbosity; $('setMode').value = settings.mode;
   $('setDelay').value = settings.voiceDelay; $('setScore').value = Math.round(settings.minScore * 100); $('setModel').value = settings.model;
   $('setFov').value = settings.fovLong;
   $('delayOut').textContent = settings.voiceDelay + ' δ'; $('scoreOut').textContent = Math.round(settings.minScore * 100) + '%';
@@ -866,6 +947,7 @@ function bindUI() {
   $('qStop').onclick = () => execute({ intent: 'STOP' });
   $('qPause').onclick = () => execute({ intent: st.paused ? 'RESUME' : 'PAUSE' });
   $('qBlack').onclick = () => setBlackout(true);
+  $('qIdentify').onclick = () => execute({ intent: 'IDENTIFY', target: null });
   $('qHelp').onclick = () => execute({ intent: 'HELP' });
   $('btnSettings').onclick = () => { renderMemory(); $('panel').showModal(); };
   $('btnClosePanel').onclick = () => $('panel').close();
@@ -889,7 +971,7 @@ function bindUI() {
   });
   bind('setVolume', 'volume', v => v / 10); bind('setRate', 'rate', v => v / 10);
   bind('setVoice', 'voice'); bind('setBeeps', 'beeps'); bind('setHaptics', 'haptics'); bind('setTorch', 'autoTorch'); bind('setVideo', 'showVideo');
-  bind('setFaces', 'faces'); bind('setVerbosity', 'verbosity', Number, 'change'); bind('setMode', 'mode', v => v, 'change');
+  bind('setFaces', 'faces'); bind('setWeb', 'webLookup'); bind('setKey', 'cloudKey', v => v.trim()); bind('setVerbosity', 'verbosity', Number, 'change'); bind('setMode', 'mode', v => v, 'change');
   bind('setDelay', 'voiceDelay', Number); bind('setScore', 'minScore', v => v / 100); bind('setFov', 'fovLong', Number);
   $('setHands').addEventListener('change', e => {
     settings.handsFree = e.target.checked;
@@ -938,7 +1020,7 @@ function registerSW() {
 }
 
 // Για αυτοματοποιημένες δοκιμές
-window.__sv = { st, search, scan, nav, memory, detector, embedder, sensors, voice, parseCommand, execute, handleUtterance, learnObject, startSearch, startScan, describeScene };
+window.__sv = { identify, st, search, scan, nav, memory, detector, embedder, sensors, voice, parseCommand, execute, handleUtterance, learnObject, startSearch, startScan, describeScene };
 
 bindUI();
 if (!recognitionSupported) $('introWarn').textContent = 'Ο browser δεν υποστηρίζει φωνητικές εντολές — θα χρησιμοποιήσετε τα κουμπιά. Προτείνεται Chrome σε Android.';

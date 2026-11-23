@@ -7,7 +7,7 @@ const VENDOR = `secondvision-vendor-${VERSION}`;
 
 const SHELL_FILES = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
-  'js/app.js', 'js/audio.js', 'js/camera.js', 'js/commands.js', 'js/faces.js', 'js/lang-el.js', 'js/memory.js',
+  'js/app.js', 'js/audio.js', 'js/camera.js', 'js/commands.js', 'js/faces.js', 'js/lang-el.js', 'js/lookup.js', 'js/memory.js',
   'js/ocr.js', 'js/sensors.js', 'js/settings.js', 'js/spatial.js', 'js/speech.js', 'js/tracker.js', 'js/vision.js'
 ];
 // Βασικά για να δουλεύει η ανίχνευση και η εκμάθηση αντικειμένων χωρίς internet

@@ -61,6 +61,7 @@
   <nav class="quick" aria-label="Γρήγορες ενέργειες">
     <button id="qDescribe">👁️<span>Τι βλέπεις</span></button>
     <button id="qScan">🔄<span>Σάρωση 360°</span></button>
+    <button id="qIdentify">🔎<span>Τι είναι αυτό</span></button>
     <button id="qRead">📖<span>Διάβασε</span></button>
     <button id="qTorch">🔦<span>Φακός</span></button>
     <button id="qPause">⏯<span>Παύση</span></button>
@@ -86,7 +87,7 @@
       <select id="setVerbosity"><option value="0">Ελάχιστες (μόνο σημαντικά)</option><option value="1">Κανονικές</option><option value="2">Αναλυτικές (με αποστάσεις)</option></select>
     </label>
     <label>Λειτουργία
-      <select id="setMode"><option value="explore">Εξερεύνηση (δωμάτιο)</option><option value="walk">Περπάτημα (εμπόδια, άνθρωποι, οχήματα)</option></select>
+      <select id="setMode"><option value="explore">Εξερεύνηση (δωμάτιο)</option><option value="walk">Περπάτημα (εμπόδια, άνθρωποι, οχήματα)</option><option value="car">Σε όχημα (χωρίς προειδοποιήσεις οχημάτων)</option></select>
     </label>
     <label>Καθυστέρηση επανάληψης <output id="delayOut"></output><input id="setDelay" type="range" min="2" max="30" step="1"></label>
     <label class="row"><input id="setHands" type="checkbox"> Συνεχής ακρόαση (πείτε «όραση» πριν την εντολή)</label>
@@ -109,6 +110,13 @@
     <label>Συγκεκριμένη κάμερα <select id="setCamera"></select></label>
     <label>Γωνία όρασης κάμερας (FOV) <output id="fovOut"></output><input id="setFov" type="range" min="45" max="100" step="1"></label>
     <p class="muted">Η γωνία όρασης επηρεάζει την ακρίβεια κατεύθυνσης και απόστασης. Οι περισσότερες κάμερες κινητών είναι 60–75°.</p>
+  </section>
+
+  <section>
+    <h3>«Τι είναι αυτό;» — αναζήτηση στο διαδίκτυο</h3>
+    <label class="row"><input id="setWeb" type="checkbox"> Αναζήτηση στη Wikipedia (στέλνει μόνο λέξεις, ποτέ εικόνα)</label>
+    <label>Προαιρετικό: κλειδί Claude API για περιγραφή από εικόνα <input id="setKey" type="password" autocomplete="off" placeholder="sk-ant-…"></label>
+    <p class="muted">Αν βάλετε κλειδί, η φωτογραφία του αντικειμένου στέλνεται στην Anthropic μόνο όταν ζητήσετε «τι είναι αυτό». Το κλειδί μένει μόνο σε αυτή τη συσκευή.</p>
   </section>
 
   <section>

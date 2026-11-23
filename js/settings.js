@@ -6,7 +6,7 @@ export const defaults = {
   rate: 1.0,              // ταχύτητα ομιλίας
   voice: true,            // φωνητικές ανακοινώσεις αντικειμένων
   verbosity: 1,           // 0 ελάχιστη, 1 κανονική, 2 αναλυτική
-  mode: 'explore',        // explore | walk
+  mode: 'explore',        // explore | walk | car (επιβάτης: σίγαση προειδοποιήσεων οχημάτων)
   voiceDelay: 6,          // δευτερόλεπτα πριν ξαναπεί το ίδιο είδος
   minScore: 0.5,          // ελάχιστη βεβαιότητα ανίχνευσης
   model: 'lite0',         // lite0 (γρήγορο) | lite2 (ακριβές)
@@ -18,6 +18,8 @@ export const defaults = {
   showVideo: true,        // εμφάνιση εικόνας (για βοηθό με όραση)
   facing: 'environment',  // κάμερα: environment | user
   deviceId: '',           // συγκεκριμένη κάμερα (π.χ. εξωτερική)
+  webLookup: true,        // «τι είναι αυτό»: αναζήτηση στη Wikipedia (στέλνει μόνο λέξεις)
+  cloudKey: '',           // προαιρετικό κλειδί Claude API για περιγραφή από εικόνα (opt-in)
   faces: true,            // αναγνώριση προσώπων που έχουν αποθηκευτεί
   classMute: {},          // { cls|id: true }
   classGain: {}           // { cls|id: 0.3..2 }

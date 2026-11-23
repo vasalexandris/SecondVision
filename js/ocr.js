@@ -28,7 +28,7 @@ async function getWorker() {
 
 /** Προεπεξεργασία: κλιμάκωση + γκρι + αυξημένη αντίθεση. */
 function prepare(video) {
-  const w = video.videoWidth, h = video.videoHeight;
+  const w = video.videoWidth || video.width, h = video.videoHeight || video.height;
   const scale = Math.min(2, 1600 / Math.max(w, h));
   const c = document.createElement('canvas');
   c.width = Math.round(w * scale); c.height = Math.round(h * scale);
