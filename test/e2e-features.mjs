@@ -72,13 +72,18 @@ ok('έξοδος από όχημα', await page.evaluate(() => JSON.parse(localS
 await page.evaluate(() => { window.__fakeCar = false; });
 
 // ---- Τι είναι αυτό ----
-await page.evaluate(() => window.__setImg('burger'));
+await page.evaluate(() => window.__setImg('tennis'));
 await page.waitForTimeout(2500);
 await page.evaluate(() => { window.__said.length = 0; });
 await page.evaluate(() => window.__sv.handleUtterance(['τι αντικείμενο είναι αυτό']));
 await page.waitForFunction(() => !window.__sv.st.busy && window.__said.length > 1, null, { timeout: 90000 }).catch(() => {});
 const s3 = await said();
 ok('«τι είναι αυτό» δίνει πληροφορίες από το διαδίκτυο', s3.some(x => /Από το διαδίκτυο, Χάμπουργκερ/.test(x)), s3.join(' | '));
+await page.evaluate(() => { window.__setText('ΓΑΛΑ|ΔΕΛΤΑ'); window.__said.length = 0; });
+await page.waitForTimeout(800);
+await page.evaluate(() => window.__sv.identify(null));
+const s3b = await said();
+ok('διαβάζει ετικέτα (OCR) πριν την αναζήτηση', s3b.some(x => /Στην ετικέτα γράφει: ΓΑΛΑ/.test(x)), s3b.join(' | '));
 // χωρίς σύνδεση
 await ctx.setOffline(true);
 await page.evaluate(() => { window.__said.length = 0; return window.__sv.identify(null); });

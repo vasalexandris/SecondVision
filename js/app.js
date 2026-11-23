@@ -700,7 +700,11 @@ async function identify(hint) {
       if (w) parts.push(`Από το διαδίκτυο, ${w.title}: ${w.extract}`);
       else parts.push('Δεν βρήκα περισσότερες πληροφορίες στο διαδίκτυο.');
     } else if (!described && !online) parts.push('Δεν υπάρχει σύνδεση στο διαδίκτυο για αναζήτηση.');
-    if (!parts.length) { chime.error(); parts.push('Δεν κατάλαβα τι είναι. Κρατήστε το πιο κοντά, στο κέντρο, με καλό φως.'); }
+    if (!parts.length) {
+      chime.error();
+      parts.push('Δεν αναγνωρίζω το αντικείμενο και δεν διαβάζω κείμενο πάνω του. Κρατήστε το πιο κοντά, στο κέντρο, με καλό φως και την ετικέτα προς την κάμερα.');
+      if (!settings.cloudKey) parts.push('Για αναγνώριση οποιουδήποτε προϊόντος από εικόνα, βάλτε κλειδί Claude στις ρυθμίσεις.');
+    }
     else chime.done();
     const out = parts.join(' ');
     $('said').textContent = out; addLog('🔎', out);
